@@ -13,7 +13,7 @@ place this repository by
 
     ~$ mv ns-allinone-3.25/ns-3.25/ ~/
     ~$ cd ns-3.25/
-    ~/ns-3.25$ CXXFLAGS="-Wall -g -std=c++11" ./waf -d debug --enable-examples configure
+    ~/ns-3.25$ git clone https://github.com/CHLLHC/sdn-vanet.git
 
 
 configure by
