@@ -612,6 +612,10 @@ RoutingProtocol::RouteInput(Ptr<const Packet> p,
       return true;
     }
 
+  if (header.GetTtl () == 0)
+    {
+      return true;
+    }
 
   // Local delivery
   NS_ASSERT (m_ipv4->GetInterfaceForDevice (idev) >= 0);
@@ -645,7 +649,12 @@ RoutingProtocol::RouteInput(Ptr<const Packet> p,
           broadcastRoute->SetOutputDevice (m_ipv4->GetNetDevice (m_SCHinterface));
           Ipv4Header ipHeader = header;
           ipHeader.SetSource (m_mainAddress); //To Prevent Brocast Storm
-          ucb (broadcastRoute, p, ipHeader);
+          ipHeader.SetTtl (ipHeader.GetTtl () - 1);
+          if (ipHeader.GetTtl ()!=0)
+            {
+              ucb (broadcastRoute, p, ipHeader);
+              //std::cout<<"FORWARD,UCB,TTL:"<<int(ipHeader.GetTtl())<<std::endl;
+            }
         }
       return true;
 
