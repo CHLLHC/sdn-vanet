@@ -13,7 +13,8 @@ place this repository by
 
     ~$ mv ns-allinone-3.25/ns-3.25/ ~/
     ~$ cd ns-3.25/
-    ~/ns-3.25$ git clone https://github.com/CHLLHC/sdn-vanet.git
+    ~/ns-3.25$ git init
+    ~/ns-3.25$ git pull https://github.com/CHLLHC/sdn-vanet.git
 
 
 configure by
