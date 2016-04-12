@@ -124,7 +124,8 @@ public:
   enum MessageType {
     HELLO_MESSAGE,
     ROUTING_MESSAGE,
-    APPOINTMENT_MESSAGE
+    APPOINTMENT_MESSAGE,
+    ACKHELLO_MESSAGE
   };
 
   MessageHeader ();
@@ -211,9 +212,8 @@ public:
   //       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
   //       |                           Velocity Z                          |
   //       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-  //       :                                                               :
-  //       :                                       :
-  //    (etc.)
+
+
   struct Hello
   {
     Ipv4Address ID;
@@ -358,12 +358,140 @@ public:
   };
 
 
+  //  AckHELLO Message Format
+  //
+  //        0                   1                   2                   3
+  //        0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+  //
+  //       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+  //       |                        ID (IP Address)                        |
+  //       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+  //       |                           Position X                          |
+  //       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+  //       |                           Position Y                          |
+  //       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+  //       |                           Position Z                          |
+  //       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+  //       |                           Velocity X                          |
+  //       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+  //       |                           Velocity Y                          |
+  //       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+  //       |                           Velocity Z                          |
+  //       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+  //       |                     ControllArea_Start X                      |
+  //       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+  //       |                     ControllArea_Start Y                      |
+  //       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+  //       |                       ControllArea_End X                      |
+  //       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+  //       |                       ControllArea_End Y                      |
+  //       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+  struct AckHello
+  {
+    Ipv4Address ID;
+
+    struct Position{
+      uint32_t X, Y, Z;
+    };
+
+    struct Velocity{
+      uint32_t X, Y, Z;
+    };
+
+    struct ControllArea_Start{
+      uint32_t X, Y;
+    };
+
+    struct ControllArea_End{
+      uint32_t X, Y;
+    };
+
+
+    Position position;
+    void SetPosition(double x, double y, double z)
+    {
+      this->position.X = IEEE754(x);
+      this->position.Y = IEEE754(y);
+      this->position.Z = IEEE754(z);
+    }
+
+    void GetPosition(double &x, double &y, double &z) const
+    {
+      x = rIEEE754(this->position.X);
+      y = rIEEE754(this->position.Y);
+      z = rIEEE754(this->position.Z);
+    }
+
+    Vector3D GetPosition() const
+    {
+      return Vector3D(rIEEE754(this->position.X),
+                      rIEEE754(this->position.Y),
+                      rIEEE754(this->position.Z));
+    }
+
+    Velocity velocity;
+    void SetVelocity(double x, double y, double z)
+    {
+      this->velocity.X = IEEE754(x);
+      this->velocity.Y = IEEE754(y);
+      this->velocity.Z = IEEE754(z);
+    }
+
+    void GetVelocity(double &x, double &y, double &z) const
+    {
+      x = rIEEE754(this->velocity.X);
+      y = rIEEE754(this->velocity.Y);
+      z = rIEEE754(this->velocity.Z);
+    }
+
+    Vector3D GetVelocity() const
+    {
+      return Vector3D(rIEEE754(this->velocity.X),
+                      rIEEE754(this->velocity.Y),
+                      rIEEE754(this->velocity.Z));
+    }
+
+    ControllArea_Start start;
+    void SetControllArea_Start(Vector2D area_start)
+    {
+      this->start.X = IEEE754(area_start.x);
+      this->start.Y = IEEE754(area_start.y);
+    }
+
+    Vector2D GetControllArea_Start() const
+    {
+      return Vector2D(rIEEE754(this->start.X),
+                      rIEEE754(this->start.Y));
+    }
+
+    ControllArea_End end;
+    void SetControllArea_End(Vector2D area_end)
+    {
+      this->end.X = IEEE754(area_end.x);
+      this->end.Y = IEEE754(area_end.y);
+    }
+
+    Vector2D GetControllArea_End() const
+    {
+      return Vector2D(rIEEE754(this->end.X),
+                      rIEEE754(this->end.Y));
+    }
+
+    void Print (std::ostream &os) const;
+    uint32_t GetSerializedSize (void) const;
+    void Serialize (Buffer::Iterator start) const;
+    uint32_t Deserialize (Buffer::Iterator start, uint32_t messageSize);
+  };
+
+
 private:
   struct
   {
     Hello hello;
     Rm rm;
     Appointment appointment;
+    AckHello ackhello;
   } m_message; // union not allowed
 
 public:
@@ -407,6 +535,19 @@ public:
     return (m_message.appointment);
   }
 
+  AckHello& GetAckHello ()
+  {
+    if (m_messageType == 0)
+      {
+        m_messageType = ACKHELLO_MESSAGE;
+      }
+    else
+      {
+        NS_ASSERT (m_messageType == ACKHELLO_MESSAGE);
+      }
+    return (m_message.ackhello);
+  }
+
   const Hello& GetHello () const
   {
     NS_ASSERT (m_messageType == HELLO_MESSAGE);
@@ -423,6 +564,12 @@ public:
   {
     NS_ASSERT (m_messageType == APPOINTMENT_MESSAGE);
     return (m_message.appointment);
+  }
+
+  const AckHello& GetAckHello () const
+  {
+    NS_ASSERT (m_messageType == ACKHELLO_MESSAGE);
+    return (m_message.ackhello);
   }
 
 };

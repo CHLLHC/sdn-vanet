@@ -126,7 +126,10 @@ RoutingProtocol::RoutingProtocol ()
     m_numAreaVaild (false),
     m_road_length (814),//MagicNumber
     m_signal_range (419),
-    m_safety_raito (0.9)
+    m_safety_raito (0.9),
+    m_lc_controllArea_vaild (false),
+    m_norespond_hm (0),
+    m_car_lc_ack_vaild (false)
 {
   m_uniformRandomVariable = CreateObject<UniformRandomVariable> ();
 }
@@ -436,6 +439,8 @@ RoutingProtocol::ProcessHM (const sdn::MessageHeader &msg)
       CI_temp.Velocity = msg.GetHello ().GetVelocity ();
       m_lc_info[ID] = CI_temp;
     }
+
+  SendAckHello (ID);
   //std::cout<<"V:"<<m_lc_info[ID].Velocity.x<<std::endl;
 }
 
@@ -496,6 +501,22 @@ RoutingProtocol::ProcessAppointment (const sdn::MessageHeader &msg)
     }
 }
 
+void
+RoutingProtocol::ProcessAckHello (const sdn::MessageHeader &msg)
+{
+  NS_LOG_FUNCTION (msg);
+  const sdn::MessageHeader::AckHello &ackhello = msg.GetAckHello ();
+  if (IsMyOwnAddress (ackhello.ID))
+    {
+      m_car_lc_ack_pos = ackhello.GetPosition ();
+      m_car_lc_ack_vel = ackhello.GetVelocity ();
+      m_car_lc_ack_time = Simulator::Now ();
+      m_car_lc_ack_vaild = true;
+      m_lc_start = ackhello.GetControllArea_Start ();
+      m_lc_end = ackhello.GetControllArea_End ();
+      m_lc_controllArea_vaild = true;
+    }
+}
 
 void
 RoutingProtocol::Clear()
@@ -789,7 +810,8 @@ RoutingProtocol::HelloTimerExpire ()
 {
   if (GetType() == CAR)
     {
-      SendHello ();
+      if (ShouldISendHello ())
+        SendHello ();
       m_helloTimer.Schedule (m_helloInterval);
     }
 }
@@ -974,6 +996,32 @@ RoutingProtocol::SendAppointment ()
       appointment.NextForwarder = cit->second.ID_of_minhop;
       QueueMessage (msg, JITTER);
     }
+}
+
+void
+RoutingProtocol::SendAckHello (Ipv4Address ID)
+{
+  NS_LOG_FUNCTION (this);
+  //TODO
+  sdn::MessageHeader msg;
+  Time now = Simulator::Now ();
+  msg.SetVTime (m_helloInterval);
+  msg.SetTimeToLive (41993);//Just MY Birthday.
+  msg.SetMessageSequenceNumber (GetMessageSequenceNumber ());
+  msg.SetMessageType (sdn::MessageHeader::ACKHELLO_MESSAGE);
+
+  sdn::MessageHeader::AckHello &ackhello = msg.GetAckHello ();
+  ackhello.ID = ID;
+  Vector3D pos = m_lc_info[ID].Position;
+  Vector3D vel = m_lc_info[ID].Velocity;
+  ackhello.SetPosition (pos.x, pos.y, pos.z);
+  ackhello.SetVelocity (vel.x, vel.y, vel.z);
+  ackhello.SetControllArea_Start (m_lc_start);
+  ackhello.SetControllArea_End (m_lc_end);
+
+  NS_LOG_DEBUG ( "SDN ACKHELLO_MESSAGE sent by node: " << ackhello.ID
+                 << "   at " << now.GetSeconds() << "s");
+  QueueMessage (msg, JITTER);
 }
 
 void
@@ -1610,6 +1658,32 @@ RoutingProtocol::SetSignalRangeNRoadLength (double signal_range, double road_len
 {
   m_signal_range = signal_range;
   m_road_length = road_length;
+}
+
+void
+RoutingProtocol::SetControllArea (Vector2D start, Vector2D end)
+{
+  m_lc_start = start;
+  m_lc_end = end;
+  m_lc_controllArea_vaild = true;
+}
+
+bool
+RoutingProtocol::ShouldISendHello ()
+{
+  if (!m_lc_controllArea_vaild || !m_car_lc_ack_vaild)
+    return true;
+  //TODO
+
+  Time now = Simulator::Now ();
+  double delta_t = now.GetSeconds () - m_car_lc_ack_time.GetSeconds ();
+  Vector3D pridict_pos = Vector3D(m_car_lc_ack_pos.x + m_car_lc_ack_vel.x * delta_t,
+                                  m_car_lc_ack_pos.y + m_car_lc_ack_vel.y * delta_t,
+                                  m_car_lc_ack_pos.z + m_car_lc_ack_vel.z * delta_t);
+  Vector3D now_pos = m_mobility->GetPosition ();
+  double distance = sqrt (pow (,2.0))
+
+
 }
 
 } // namespace sdn

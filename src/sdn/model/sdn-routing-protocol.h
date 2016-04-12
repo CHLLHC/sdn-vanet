@@ -252,8 +252,10 @@ private:
   void SendQueuedMessages ();//implemented
   void SendHello ();//implemented
   void SendRoutingMessage (); //Fullfilled
-  void SendAppointment();
+  void SendAppointment ();
+  void SendAckHello (Ipv4Address ID);
 
+  void ProcessAckHello (const sdn::MessageHeader &msg);
   void ProcessAppointment (const sdn::MessageHeader &msg);
   void ProcessRm (const sdn::MessageHeader &msg);//implemented
   void ProcessHM (const sdn::MessageHeader &msg); //implemented
@@ -347,7 +349,21 @@ private:
   void SelectNewNodeInAreaZero ();
 
   Ipv4Address m_theFirstCar;//Use by Reschedule (), SelectNewNodeInAreaZero(); Assign by SelectNode ();
-  //Duplicate_Detection m_duplicate_detection;
+
+  Vector2D m_lc_start, m_lc_end;//both Car and LC will use this.
+  bool m_lc_controllArea_vaild;
+  uint32_t m_norespond_hm;
+public:
+  void SetControllArea (Vector2D start, Vector2D end);
+
+private:
+
+  Vector3D m_car_lc_ack_pos, m_car_lc_ack_vel;
+  Time m_car_lc_ack_time;
+  bool m_car_lc_ack_vaild;
+
+  bool ShouldISendHello() const;
+
 };
 
 

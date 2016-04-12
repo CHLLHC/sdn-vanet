@@ -32,6 +32,7 @@
 #define SDN_RM_HEADER_SIZE 16
 #define SDN_RM_TUPLE_SIZE 3
 #define SDN_APPOINTMENT_HEADER_SIZE 12
+#define SDN_ACKHELLO_HEADER_SIZE 44
 
 NS_LOG_COMPONENT_DEFINE ("SdnHeader");
 
@@ -404,6 +405,64 @@ MessageHeader::Appointment::Deserialize (Buffer::Iterator start, uint32_t messag
   this->NextForwarder.Set (ip_temp);
   return (messageSize);
 }
+
+
+// ---------------- SDN AckHello Message -------------------------------
+
+uint32_t
+MessageHeader::AckHello::GetSerializedSize (void) const
+{
+  return (SDN_ACKHELLO_HEADER_SIZE);
+}
+
+void
+MessageHeader::AckHello::Print (std::ostream &os) const
+{
+  /// \todo
+}
+
+void
+MessageHeader::AckHello::Serialize (Buffer::Iterator start) const
+{
+  Buffer::Iterator i = start;
+
+  i.WriteHtonU32 (this->ID.Get());
+  i.WriteHtonU32 (this->position.X);
+  i.WriteHtonU32 (this->position.Y);
+  i.WriteHtonU32 (this->position.Z);
+  i.WriteHtonU32 (this->velocity.X);
+  i.WriteHtonU32 (this->velocity.Y);
+  i.WriteHtonU32 (this->velocity.Z);
+  i.WriteHtonU32 (this->start.X);
+  i.WriteHtonU32 (this->start.Y);
+  i.WriteHtonU32 (this->end.X);
+  i.WriteHtonU32 (this->end.Y);
+}
+
+uint32_t
+MessageHeader::AckHello::Deserialize (Buffer::Iterator start,
+  uint32_t messageSize)
+{
+  Buffer::Iterator i = start;
+
+  NS_ASSERT (messageSize == SDN_ACKHELLO_HEADER_SIZE);
+
+  uint32_t add_temp = i.ReadNtohU32();
+  this->ID.Set(add_temp);
+  this->position.X = i.ReadNtohU32();
+  this->position.Y = i.ReadNtohU32();
+  this->position.Z = i.ReadNtohU32();
+  this->velocity.X = i.ReadNtohU32();
+  this->velocity.Y = i.ReadNtohU32();
+  this->velocity.Z = i.ReadNtohU32();
+  this->position.Z = i.ReadNtohU32();
+  this->velocity.X = i.ReadNtohU32();
+  this->velocity.Y = i.ReadNtohU32();
+  this->velocity.Z = i.ReadNtohU32();
+
+  return (messageSize);
+}
+
 
 }
 }  // namespace sdn, ns3

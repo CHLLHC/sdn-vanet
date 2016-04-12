@@ -13,7 +13,7 @@
 #include <vector>
 #include <dirent.h>//DIR*
 #include "SDN.h"
-
+#include <string> //config connect
 
 NS_LOG_COMPONENT_DEFINE ("SDN");
 
@@ -321,8 +321,9 @@ void VanetSim::ConfigApp()
 	m_source = Source.Install(m_nodes.Get(nodeNum+1));//Insatll on Source
 	m_source.Stop(Seconds(duration));//Default Start time is 0.
 
+	std::string temp = "/NodeList/"+std::to_string (nodeNum+1)+"/ApplicationList/0/$ns3::OnOffApplication/Tx";
 	Config::ConnectWithoutContext (
-	    "/NodeList/51/ApplicationList/0/$ns3::OnOffApplication/Tx",
+	    temp,
 	    MakeCallback(&VanetSim::TXTrace, this));
 	/*
 	TypeId tid = TypeId::LookupByName ("ns3::UdpSocketFactory");
