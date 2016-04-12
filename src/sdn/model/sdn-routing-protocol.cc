@@ -125,7 +125,8 @@ RoutingProtocol::RoutingProtocol ()
     m_isPadding (false),
     m_numAreaVaild (false),
     m_road_length (814),//MagicNumber
-    m_signal_range (419)
+    m_signal_range (419),
+    m_safety_raito (0.9)
 {
   m_uniformRandomVariable = CreateObject<UniformRandomVariable> ();
 }
@@ -1010,8 +1011,11 @@ RoutingProtocol::ComputeRoute ()
       Do_Update ();
     }
 
-  std::cout<<"SendAppointment"<<std::endl;
-  SendAppointment ();
+  if (m_linkEstablished)
+    {
+      std::cout<<"SendAppointment"<<std::endl;
+      SendAppointment ();
+    }
   std::cout<<"Reschedule"<<std::endl;
   Reschedule ();
   std::cout<<"CR DONE"<<std::endl;
@@ -1052,6 +1056,11 @@ RoutingProtocol::Do_Update ()
   std::cout<<"SelectNewNodeInAreaZero"<<std::endl;
   SelectNewNodeInAreaZero ();
   std::cout<<"Do_Update DONE"<<std::endl;
+  if (!m_linkEstablished)
+    {
+      std::cout<<"!m_linkEstablished"<<std::endl;
+      Do_Init_Compute ();
+    }
 }
 
 void
@@ -1329,6 +1338,16 @@ RoutingProtocol::SelectNewNodeInAreaZero ()
             }
           std::cout<<std::endl;
         }
+
+      //Time to short?
+      double vx = m_lc_info[m_theFirstCar].Velocity.x;
+      double px = m_lc_info[m_theFirstCar].GetPos ().x;
+      double t2l = (0.5 * m_signal_range - px) / vx;
+      if (t2l < 1)
+        {
+          m_linkEstablished = false;
+          std::cout<<"T2L:"<<t2l<<std::endl;
+        }
     }
   else
     {
@@ -1384,6 +1403,9 @@ RoutingProtocol::GetShortHop(const Ipv4Address& IDa, const Ipv4Address& IDb)
                pxb = m_lc_info[IDb].GetPos ().x;
   // time to b left
   double temp;
+
+  const double safe_range = m_signal_range * m_safety_raito;
+
   if (vxb > 0)
     {
       temp = (m_road_length - pxb) / vxb;
@@ -1394,7 +1416,7 @@ RoutingProtocol::GetShortHop(const Ipv4Address& IDa, const Ipv4Address& IDb)
       temp = (m_road_length - pxa) / vxa;
     }
   double const t2bl = temp;
-  if ((pxb - pxa < m_signal_range) && (abs((pxb + vxb*t2bl)-(pxa + vxa*t2bl)) < m_signal_range))
+  if ((pxb - pxa < safe_range) && (abs((pxb + vxb*t2bl)-(pxa + vxa*t2bl)) < safe_range))
     {
       ShortHop sh;
       sh.nextID = IDb;
@@ -1408,15 +1430,15 @@ RoutingProtocol::GetShortHop(const Ipv4Address& IDa, const Ipv4Address& IDb)
       sh.isTransfer = true;
       sh.t = 0; // Time when connection loss
       sh.hopnumber = INFHOP;
-      if (pxb - pxa < m_signal_range)
+      if (pxb - pxa < safe_range)
         {
           if (vxb > vxa)
             {
-              sh.t = (m_signal_range + pxa - pxb) / (vxb - vxa);
+              sh.t = (safe_range + pxa - pxb) / (vxb - vxa);
             }
           else
             {
-              sh.t = (m_signal_range + pxb - pxa) / (vxa - vxb);
+              sh.t = (safe_range + pxb - pxa) / (vxa - vxb);
             }
         }
       //Find another car
@@ -1431,10 +1453,10 @@ RoutingProtocol::GetShortHop(const Ipv4Address& IDa, const Ipv4Address& IDb)
                        tpxb = pxb + vxb * sh.t;
           //t2bl minus t
           double const t2blmt = t2bl - sh.t;
-          if ((tpxa<tpxc)&&(tpxc<tpxb)&&(tpxc-tpxa<m_signal_range)&&(tpxb-tpxc<m_signal_range))
+          if ((tpxa<tpxc)&&(tpxc<tpxb)&&(tpxc-tpxa<safe_range)&&(tpxb-tpxc<safe_range))
             {
-              if ((abs((tpxb + vxb*t2blmt)-(tpxc + vxc*t2blmt)) < m_signal_range)&&
-                  (abs((tpxc + vxc*t2blmt)-(tpxa + vxa*t2blmt)) < m_signal_range))
+              if ((abs((tpxb + vxb*t2blmt)-(tpxc + vxc*t2blmt)) < safe_range)&&
+                  (abs((tpxc + vxc*t2blmt)-(tpxa + vxa*t2blmt)) < safe_range))
                 {
                   sh.IDa = IDa;
                   sh.IDb = IDb;

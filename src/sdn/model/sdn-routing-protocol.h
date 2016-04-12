@@ -319,6 +319,8 @@ private:
 
   double m_road_length;
   double m_signal_range;
+  double m_safety_raito;
+
 public:
   void SetSignalRangeNRoadLength (double signal_range, double road_length);
 
