@@ -303,6 +303,9 @@ void VanetSim::ConfigApp()
         routing->SetCCHInterface (m_CCHInterfaces.Get (i).second);
 		    routing->SetSCHInterface (m_SCHInterfaces.Get (i).second);
 		  }
+		Ptr<sdn::RoutingProtocol> routing =
+		            m_nodes.Get (nodeNum)->GetObject<sdn::RoutingProtocol> ();
+		routing->SetControllArea (Vector2D (0,0), Vector2D (1000,-10));
 	}
 
 

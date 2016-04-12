@@ -403,6 +403,15 @@ RoutingProtocol::RecvSDN (Ptr<Socket> socket)
             ProcessAppointment (messageHeader);
           break;
 
+        case sdn::MessageHeader::ACKHELLO_MESSAGE:
+          NS_LOG_DEBUG (Simulator::Now ().GetSeconds ()
+                        << "s SDN node " << m_mainAddress
+                        << " received ACKHELLO message of size "
+                        << messageHeader.GetSerializedSize ());
+          if (GetType() == CAR)
+            ProcessAckHello (messageHeader);
+          break;
+
         default:
           NS_LOG_DEBUG ("SDN message type " <<
                         int (messageHeader.GetMessageType ()) <<
@@ -1379,7 +1388,7 @@ RoutingProtocol::SelectNewNodeInAreaZero ()
                   break;
                 }
               The_Car = m_lc_info[The_Car].ID_of_minhop;
-              if (The_Car != Ipv4Address::GetZero ())
+              if ((The_Car != Ipv4Address::GetZero ())&&(m_lc_info.find (The_Car) != m_lc_info.end ()))
                 {
                   std::cout<<"<-"<<m_lc_info[The_Car].GetPos ().x - oldp<<"->";
                 }
@@ -1640,8 +1649,9 @@ RoutingProtocol::RemoveTimeOut()
   std::vector<Ipv4Address> pendding;
   while (it != m_lc_info.end ())
     {
-      if (now.GetSeconds() - it->second.LastActive.GetSeconds () > 3 * m_helloInterval.GetSeconds())
+      if (!IsInMyArea (it->second.GetPos ()))
         {
+          std::cout<<"!IsInMyArea (it->second.GetPos ())"<<std::endl;
           pendding.push_back (it->first);
         }
       ++it;
@@ -1669,10 +1679,15 @@ RoutingProtocol::SetControllArea (Vector2D start, Vector2D end)
 }
 
 bool
-RoutingProtocol::ShouldISendHello ()
+RoutingProtocol::ShouldISendHello () const
 {
+  //return true;
+
   if (!m_lc_controllArea_vaild || !m_car_lc_ack_vaild)
-    return true;
+    {
+      //std::cout<<"notVaild"<<std::endl;
+      return true;
+    }
   //TODO
 
   Time now = Simulator::Now ();
@@ -1681,9 +1696,50 @@ RoutingProtocol::ShouldISendHello ()
                                   m_car_lc_ack_pos.y + m_car_lc_ack_vel.y * delta_t,
                                   m_car_lc_ack_pos.z + m_car_lc_ack_vel.z * delta_t);
   Vector3D now_pos = m_mobility->GetPosition ();
-  double distance = sqrt (pow (,2.0))
+  double distance = sqrt (pow (now_pos.x - pridict_pos.x,2.0) +
+                          pow (now_pos.y - pridict_pos.y,2.0) +
+                          pow (now_pos.z - pridict_pos.z,2.0));
 
+  if (distance > ((1-m_safety_raito)/2) * m_signal_range)
+    {
+      //std::cout<<"DIS,YES!"<<distance<<" "<<std::endl;
+      return true;
+    }
 
+  //std::cout<<"return FALSE"<<std::endl;
+  return false;
+}
+
+bool
+RoutingProtocol::IsInMyArea (Vector3D pos) const
+{
+  double t = m_lc_start.y,
+         b = m_lc_end.y,
+         l = m_lc_start.x,
+         r = m_lc_end.x;
+  double temp;
+
+  if (t>b)
+    {
+      temp = t;
+      t = b;
+      b = temp;
+    }
+  if (l>r)
+    {
+      temp = l;
+      l = r;
+      r = temp;
+    }
+
+  if ((l<=pos.x)&&(pos.x<=r)&&(t<=pos.y)&&(pos.y<=b))
+    {
+      return true;
+    }
+  /*std::cout<<t<<","<<pos.y<<","<<b<<";"<<l<<","<<pos.x<<","<<r<<std::endl;
+  if (m_lc_controllArea_vaild)
+    std::cout<<"%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%"<<std::endl;*/
+  return false;
 }
 
 } // namespace sdn

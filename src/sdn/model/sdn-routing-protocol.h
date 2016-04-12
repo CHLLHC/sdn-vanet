@@ -364,6 +364,8 @@ private:
 
   bool ShouldISendHello() const;
 
+  bool IsInMyArea (Vector3D pos) const;
+
 };
 
 

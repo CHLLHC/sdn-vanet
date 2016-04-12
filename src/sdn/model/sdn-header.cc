@@ -172,6 +172,9 @@ MessageHeader::GetSerializedSize (void) const
     case APPOINTMENT_MESSAGE:
       size += m_message.appointment.GetSerializedSize ();
       break;
+    case ACKHELLO_MESSAGE:
+      size += m_message.ackhello.GetSerializedSize ();
+      break;
     default:
       NS_ASSERT (false);
     }
@@ -205,6 +208,9 @@ MessageHeader::Serialize (Buffer::Iterator start) const
     case APPOINTMENT_MESSAGE:
       m_message.appointment.Serialize (i);
       break;
+    case ACKHELLO_MESSAGE:
+      m_message.ackhello.Serialize (i);
+      break;
     default:
       NS_ASSERT (false);
     }
@@ -217,7 +223,7 @@ MessageHeader::Deserialize (Buffer::Iterator start)
   uint32_t size;
   Buffer::Iterator i = start;
   m_messageType  = (MessageType) i.ReadU8 ();
-  NS_ASSERT (m_messageType >= HELLO_MESSAGE && m_messageType <= APPOINTMENT_MESSAGE);
+  NS_ASSERT (m_messageType >= HELLO_MESSAGE && m_messageType <= ACKHELLO_MESSAGE);
   m_vTime  = i.ReadU8 ();
   m_messageSize  = i.ReadNtohU16 ();
   m_timeToLive  = i.ReadNtohU16 ();
@@ -236,6 +242,10 @@ MessageHeader::Deserialize (Buffer::Iterator start)
     case APPOINTMENT_MESSAGE:
       size +=
         m_message.appointment.Deserialize (i, m_messageSize - SDN_MSG_HEADER_SIZE);
+      break;
+    case ACKHELLO_MESSAGE:
+      size +=
+        m_message.ackhello.Deserialize (i, m_messageSize - SDN_MSG_HEADER_SIZE);
       break;
     default:
       NS_ASSERT (false);
