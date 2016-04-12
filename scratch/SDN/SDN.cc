@@ -353,6 +353,10 @@ void VanetSim::ReceiveDataPacket(Ptr<Socket> socket)
 	      {
 	        Unique_RX_Pkts++;
 	        dup_det.insert (uid);
+
+	        Time now = Simulator::Now ();
+	        int64_t temp = now.GetMicroSeconds () - delay[uid].GetMicroSeconds ();
+	        delay_vector.push_back (temp);
 	      }
       Rx_Data_Bytes += packet->GetSize();
       Rx_Data_Pkts++;
@@ -378,6 +382,31 @@ void VanetSim::ProcessOutputs()
 	std::cout<<"Tx_Data_Pkts:   "<<Tx_Data_Pkts<<std::endl;
 	std::cout<<"Rx_Data_Pkts:   "<<Rx_Data_Pkts<<std::endl;
 	std::cout<<"Unique_RX_Pkts: "<<Unique_RX_Pkts<<std::endl;
+
+
+	int64_t best = delay_vector[0],
+	        worst = delay_vector[0];
+	double avg = 0;
+	for (std::vector<int64_t>::const_iterator cit = delay_vector.begin ();
+	     cit != delay_vector.end ();++cit)
+	  {
+	    if (*cit<best)
+	      {
+	        best = *cit;
+	      }
+
+	    if (*cit>worst)
+	      {
+	        worst = *cit;
+	      }
+	    avg += *cit;
+	  }
+
+	avg /= delay_vector.size();
+	std::cout<<"Best delay:   "<<best<<"us"<<std::endl;
+	std::cout<<"Worst delay:   "<<worst<<"us"<<std::endl;
+	std::cout<<"Avg delay: "<<avg<<"us"<<std::endl;
+
 }
 
 void VanetSim::Run()
@@ -433,6 +462,10 @@ VanetSim::TXTrace (Ptr<const Packet> newpacket)
   Tx_Data_Pkts++;
   Tx_Data_Bytes += newpacket->GetSize ();
   //std::cout<<"ANOTHER ONE!HAHAHA"<<std::endl;
+
+  Time now = Simulator::Now ();
+  delay[newpacket->GetUid ()] = now;
+
 }
 
 // Example to use ns2 traces file in ns3

@@ -28,6 +28,8 @@
 #include "ns3/vanetmobility-helper.h"
 
 #include <unordered_set>
+#include <unordered_map>
+#include <vector>
 
 using namespace ns3;
 
@@ -90,6 +92,8 @@ private:
 	void SendDataPacket ();
 	void TXTrace (Ptr<const Packet> newpacket);
 	std::unordered_set<uint64_t> dup_det;
+	std::unordered_map<uint64_t, Time> delay;
+	std::vector<int64_t> delay_vector;
 };
 
 
