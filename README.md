@@ -11,11 +11,13 @@ GET ns-3 by
 
 place this repository by
 
-    ~$ mv ns-allinone-3.25/ns-3.25/ ~/
-    ~$ cd ns-3.25/
-    ~/ns-3.25$ git init
-    ~/ns-3.25$ git pull https://github.com/CHLLHC/sdn-vanet.git
-
+    ~$ mv ns-allinone-3.25/ns-3.25/ ./
+    ~$ rm -r ns-allinone-3.25
+    ~$ git clone https://github.com/CHLLHC/sdn-vanet.git temp
+    ~$ mv temp/.git ns-3.25/.git
+    ~$ rm -r temp
+    ~$ cd ns-3.25
+    ~/ns-3.25$ git checkout -- .
 
 configure by
 
