@@ -113,7 +113,7 @@ public:
   /*
    * Set Road length and signal range
    */
-  void SetRLnSR(double signal_range, double road_length);
+  void SetSR(double signal_range);
 
 private:
   /**

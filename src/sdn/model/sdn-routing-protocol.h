@@ -324,7 +324,7 @@ private:
   double m_safety_raito;
 
 public:
-  void SetSignalRangeNRoadLength (double signal_range, double road_length);
+  void SetSignalRange (double signal_range);
 
 private:
   void Do_Init_Compute ();
@@ -365,7 +365,9 @@ private:
   bool ShouldISendHello() const;
 
   bool IsInMyArea (Vector3D pos) const;
-
+  static bool Comp (const std::pair<double, Ipv4Address> &p1, const std::pair<double, Ipv4Address> &p2);
+  static double CalcDist (const Vector3D &pos1, const Vector2D &pos2);
+  double GetProjection (const Vector3D &vel) const;
 };
 
 

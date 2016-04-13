@@ -273,7 +273,7 @@ void VanetSim::ConfigApp()
 	  sdn.ExcludeInterface (m_nodes.Get (nodeNum), 0);
 	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+1), sdn::CAR);//Treat Source and Sink as CAR
 	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+2), sdn::CAR);
-	  sdn.SetRLnSR (range1, range2);
+	  sdn.SetSR (range1);
 	  internet.SetRoutingHelper(sdn);
 		std::cout<<"SetRoutingHelper Done"<<std::endl;
 	}

@@ -89,7 +89,7 @@ SdnHelper::Create (Ptr<Node> node) const
     {
       agent->SetType (sdn::OTHERS);
     }
-  agent->SetSignalRangeNRoadLength (m_sr, m_rl);
+  agent->SetSignalRange (m_sr);
 
 
   node->AggregateObject (agent);
@@ -156,10 +156,9 @@ SdnHelper::SetNodeTypeMap (Ptr<Node> node, sdn::NodeType nt)
 }
 
 void
-SdnHelper::SetRLnSR(double signal_range, double road_length)
+SdnHelper::SetSR(double signal_range)
 {
   m_sr = signal_range;
-  m_rl = road_length;
 }
 
 } // namespace ns3
