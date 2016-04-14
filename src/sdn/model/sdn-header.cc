@@ -31,8 +31,11 @@
 #define SDN_HELLO_HEADER_SIZE 28
 #define SDN_RM_HEADER_SIZE 16
 #define SDN_RM_TUPLE_SIZE 3
-#define SDN_APPOINTMENT_HEADER_SIZE 12
+#define SDN_APPOINTMENT_HEADER_SIZE 8
 #define SDN_ACKHELLO_HEADER_SIZE 44
+#define SDN_DONTFORWARD_HEADER_SIZE 8
+#define SDN_DONTFORWARD_TUPLE_SIZE 4
+
 
 NS_LOG_COMPONENT_DEFINE ("SdnHeader");
 
@@ -175,6 +178,10 @@ MessageHeader::GetSerializedSize (void) const
     case ACKHELLO_MESSAGE:
       size += m_message.ackhello.GetSerializedSize ();
       break;
+    case DONT_FORWARD:
+      size += m_message.dontforward.GetSerializedSize ();
+      break;
+
     default:
       NS_ASSERT (false);
     }
@@ -211,6 +218,9 @@ MessageHeader::Serialize (Buffer::Iterator start) const
     case ACKHELLO_MESSAGE:
       m_message.ackhello.Serialize (i);
       break;
+    case DONT_FORWARD:
+      m_message.dontforward.Serialize (i);
+      break;
     default:
       NS_ASSERT (false);
     }
@@ -223,7 +233,7 @@ MessageHeader::Deserialize (Buffer::Iterator start)
   uint32_t size;
   Buffer::Iterator i = start;
   m_messageType  = (MessageType) i.ReadU8 ();
-  NS_ASSERT (m_messageType >= HELLO_MESSAGE && m_messageType <= ACKHELLO_MESSAGE);
+  NS_ASSERT (m_messageType >= HELLO_MESSAGE && m_messageType <= LC_ACK_LC);
   m_vTime  = i.ReadU8 ();
   m_messageSize  = i.ReadNtohU16 ();
   m_timeToLive  = i.ReadNtohU16 ();
@@ -246,6 +256,10 @@ MessageHeader::Deserialize (Buffer::Iterator start)
     case ACKHELLO_MESSAGE:
       size +=
         m_message.ackhello.Deserialize (i, m_messageSize - SDN_MSG_HEADER_SIZE);
+      break;
+    case DONT_FORWARD:
+      size +=
+        m_message.dontforward.Deserialize (i, m_messageSize - SDN_MSG_HEADER_SIZE);
       break;
     default:
       NS_ASSERT (false);
@@ -396,7 +410,6 @@ MessageHeader::Appointment::Serialize (Buffer::Iterator start) const
   if (ATField == FORWARDER)
     at = 0xFFFF;
   i.WriteHtonU32 (at);
-  i.WriteHtonU32 (this->NextForwarder.Get());
 }
 
 uint32_t
@@ -411,8 +424,6 @@ MessageHeader::Appointment::Deserialize (Buffer::Iterator start, uint32_t messag
     this->ATField = FORWARDER;
   else
     this->ATField = NORMAL;
-  ip_temp = i.ReadNtohU32();
-  this->NextForwarder.Set (ip_temp);
   return (messageSize);
 }
 
@@ -472,6 +483,66 @@ MessageHeader::AckHello::Deserialize (Buffer::Iterator start,
 
   return (messageSize);
 }
+
+// ---------------- DONT_FORWARD Routing Message -------------------------------
+
+uint32_t
+MessageHeader::DontForward::GetSerializedSize (void) const
+{
+  return (SDN_DONTFORWARD_HEADER_SIZE +
+    this->list.size () * SDN_DONTFORWARD_TUPLE_SIZE);
+}
+
+void
+MessageHeader::DontForward::Print (std::ostream &os) const
+{
+  /// \todo
+}
+
+void
+MessageHeader::DontForward::Serialize (Buffer::Iterator start) const
+{
+  Buffer::Iterator i = start;
+
+  i.WriteHtonU32 (this->ID.Get());
+  i.WriteHtonU32 (this->list_size);
+
+  for (std::vector<Ipv4Address>::const_iterator cit = this->list.begin ();
+       cit != this->list.end (); ++cit)
+    {
+      i.WriteHtonU32 (cit->Get());
+    }
+}
+
+uint32_t
+MessageHeader::DontForward::Deserialize (Buffer::Iterator start,
+  uint32_t messageSize)
+{
+  Buffer::Iterator i = start;
+
+  this->list.clear ();
+  NS_ASSERT (messageSize >= SDN_DONTFORWARD_HEADER_SIZE);
+
+  uint32_t add_temp = i.ReadNtohU32();
+  this->ID.Set(add_temp);
+  this->list_size = i.ReadNtohU32 ();
+
+  NS_ASSERT ((messageSize - SDN_DONTFORWARD_HEADER_SIZE) %
+    (SDN_DONTFORWARD_TUPLE_SIZE) == 0);
+
+  uint32_t numTuples = (messageSize - SDN_DONTFORWARD_HEADER_SIZE)
+    / (SDN_DONTFORWARD_TUPLE_SIZE);
+  NS_ASSERT ( numTuples == this->list_size );
+
+  for (uint32_t n = 0; n < numTuples; ++n)
+  {
+    uint32_t temp = i.ReadNtohU32();
+    this->list.push_back (Ipv4Address (temp));
+   }
+
+  return (messageSize);
+}
+
 
 
 }

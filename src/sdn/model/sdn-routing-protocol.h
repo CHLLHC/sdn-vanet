@@ -38,6 +38,7 @@
 
 #include <vector>
 #include <map>
+#include <set>
 
 
 namespace ns3 {
@@ -91,6 +92,7 @@ public:
   uint32_t minhop;
   Ipv4Address ID_of_minhop;
   AppointmentType appointmentResult;
+  std::vector<Ipv4Address> list_of_dont_forward;
 };
 
 struct ShortHop
@@ -171,6 +173,8 @@ private:
   std::map<Ipv4Address, RoutingTableEntry> m_table; ///< Data structure for the routing table. (Use By Mainly by CAR Node, but LC needs it too)
 
   std::map<Ipv4Address, CarInfo> m_lc_info;///for LC
+  std::map<Ipv4Address, std::set<Ipv4Address> > m_lc_headNtail;
+
 
   EventGarbageCollector m_events;
 	
@@ -253,8 +257,10 @@ private:
   void SendHello ();//implemented
   void SendRoutingMessage (); //Fullfilled
   void SendAppointment ();
-  void SendAckHello (Ipv4Address ID);
+  void SendAckHello (const Ipv4Address& ID);
+  void SendDontForward (const Ipv4Address& ID);
 
+  void ProcessDontForward (const sdn::MessageHeader &msg);
   void ProcessAckHello (const sdn::MessageHeader &msg);
   void ProcessAppointment (const sdn::MessageHeader &msg);
   void ProcessRm (const sdn::MessageHeader &msg);//implemented
@@ -292,7 +298,11 @@ private:
   NodeType m_nodetype;
   //Only node type CAR use this(below)
   AppointmentType m_appointmentResult;
-  Ipv4Address m_next_forwarder;
+  std::set<Ipv4Address> m_dont_forward;
+  bool IsInDontForward (const Ipv4Address& id) const;
+
+  std::list<Ipv4Address> m_forward_chain;
+
 
 public:
   void SetType (NodeType nt); //implemented
@@ -330,6 +340,7 @@ private:
   void Do_Init_Compute ();
   void Do_Update ();
   void Reschedule ();
+  void CalcDontForward (const Ipv4Address& ID);
 
   void Partition ();
   void SetN_Init ();
@@ -368,6 +379,8 @@ private:
   static bool Comp (const std::pair<double, Ipv4Address> &p1, const std::pair<double, Ipv4Address> &p2);
   static double CalcDist (const Vector3D &pos1, const Vector2D &pos2);
   double GetProjection (const Vector3D &vel) const;
+
+
 };
 
 

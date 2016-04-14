@@ -119,7 +119,6 @@ RoutingProtocol::RoutingProtocol ()
     m_CCHinterface (0),
     m_nodetype (OTHERS),
     m_appointmentResult (NORMAL),
-    m_next_forwarder (uint32_t (0)),
     m_linkEstablished (false),
     m_numArea (0),
     m_isPadding (false),
@@ -412,6 +411,15 @@ RoutingProtocol::RecvSDN (Ptr<Socket> socket)
             ProcessAckHello (messageHeader);
           break;
 
+        case sdn::MessageHeader::DONT_FORWARD:
+          NS_LOG_DEBUG (Simulator::Now ().GetSeconds ()
+                        << "s SDN node " << m_mainAddress
+                        << " received DONT_FORWARD message of size "
+                        << messageHeader.GetSerializedSize ());
+          if (GetType() == CAR)
+            ProcessDontForward (messageHeader);
+          break;
+
         default:
           NS_LOG_DEBUG ("SDN message type " <<
                         int (messageHeader.GetMessageType ()) <<
@@ -503,13 +511,12 @@ RoutingProtocol::ProcessAppointment (const sdn::MessageHeader &msg)
       switch (appointment.ATField)
       {
         case NORMAL:
+          //std::cout<<"CAR"<<m_mainAddress.Get () % 256<<"ProcessAppointment";
           //std::cout<<" \"NORMAL\""<<std::endl;
           break;
         case FORWARDER:
-          m_next_forwarder = appointment.NextForwarder;
           //std::cout<<"CAR"<<m_mainAddress.Get () % 256<<"ProcessAppointment";
           //std::cout<<" \"FORWARDER\""<<std::endl;
-          //std::cout<<"NextForwarder:"<<m_next_forwarder.Get () % 256<<std::endl;
           break;
         default:
           std::cout<<" ERROR TYPE"<<std::endl;
@@ -532,6 +539,29 @@ RoutingProtocol::ProcessAckHello (const sdn::MessageHeader &msg)
       m_lc_start = ackhello.GetControllArea_Start ();
       m_lc_end = ackhello.GetControllArea_End ();
       m_lc_controllArea_vaild = true;
+    }
+}
+
+void
+RoutingProtocol::ProcessDontForward (const sdn::MessageHeader &msg)
+{
+  NS_LOG_FUNCTION (msg);
+
+  const sdn::MessageHeader::DontForward &dontforward = msg.GetDontForward ();
+  if (IsMyOwnAddress (dontforward.ID))
+    {
+      Time now = Simulator::Now();
+      NS_LOG_DEBUG ("@" << now.GetSeconds() << ":Node " << m_mainAddress
+                    << "ProcessRm.");
+
+      NS_ASSERT (dontforward.list_size >= 0);
+
+      m_dont_forward.clear ();
+      for (std::vector<Ipv4Address>::const_iterator cit = dontforward.list.begin ();
+           cit != dontforward.list.end (); ++cit)
+        {
+          m_dont_forward.insert (*cit);
+        }
     }
 }
 
@@ -680,7 +710,7 @@ RoutingProtocol::RouteInput(Ptr<const Packet> p,
         }
 
       //Broadcast forward
-      if ((iif == m_SCHinterface) && (m_nodetype == CAR) && (m_appointmentResult == FORWARDER) && (sour != m_next_forwarder))
+      if ((iif == m_SCHinterface) && (m_nodetype == CAR) && (m_appointmentResult == FORWARDER) && (!IsInDontForward (sour)))
         {
           NS_LOG_LOGIC ("Forward broadcast");
           Ptr<Ipv4Route> broadcastRoute = Create<Ipv4Route> ();
@@ -701,6 +731,13 @@ RoutingProtocol::RouteInput(Ptr<const Packet> p,
   //Drop
   return true;
 }
+
+bool
+RoutingProtocol::IsInDontForward (const Ipv4Address& id) const
+{
+  return (m_dont_forward.find (id) != m_dont_forward.end ());
+}
+
 
 void
 RoutingProtocol::NotifyInterfaceUp (uint32_t i)
@@ -1010,13 +1047,12 @@ RoutingProtocol::SendAppointment ()
       sdn::MessageHeader::Appointment &appointment = msg.GetAppointment ();
       appointment.ID = cit->first;
       appointment.ATField = cit->second.appointmentResult;
-      appointment.NextForwarder = cit->second.ID_of_minhop;
       QueueMessage (msg, JITTER);
     }
 }
 
 void
-RoutingProtocol::SendAckHello (Ipv4Address ID)
+RoutingProtocol::SendAckHello (const Ipv4Address& ID)
 {
   NS_LOG_FUNCTION (this);
   sdn::MessageHeader msg;
@@ -1039,6 +1075,24 @@ RoutingProtocol::SendAckHello (Ipv4Address ID)
                  << "   at " << now.GetSeconds() << "s");
   QueueMessage (msg, JITTER);
 }
+
+void
+RoutingProtocol::SendDontForward (const Ipv4Address& ID)
+{
+  NS_LOG_FUNCTION (this);
+  sdn::MessageHeader msg;
+  Time now = Simulator::Now ();
+  msg.SetVTime (m_helloInterval);
+  msg.SetTimeToLive (41993);//Just MY Birthday.
+  msg.SetMessageSequenceNumber (GetMessageSequenceNumber ());
+  msg.SetMessageType (sdn::MessageHeader::DONT_FORWARD);
+  sdn::MessageHeader::DontForward &dontforward = msg.GetDontForward ();
+  dontforward.ID = ID;
+  dontforward.list = m_lc_info[ID].list_of_dont_forward;
+  dontforward.list_size = dontforward.list.size ();
+  QueueMessage (msg, JITTER);
+}
+
 
 void
 RoutingProtocol::SetMobility (Ptr<MobilityModel> mobility)
@@ -1079,6 +1133,13 @@ RoutingProtocol::ComputeRoute ()
     {
       std::cout<<"SendAppointment"<<std::endl;
       SendAppointment ();
+      for (std::list<Ipv4Address>::const_iterator cit = m_forward_chain.begin ();
+           cit != m_forward_chain.end (); ++cit)
+        {
+          std::cout<<"SendDontForward"<<cit->Get ()%256<<std::endl;
+          CalcDontForward (*cit);
+          SendDontForward (*cit);
+        }
     }
   std::cout<<"Reschedule"<<std::endl;
   Reschedule ();
@@ -1316,8 +1377,10 @@ RoutingProtocol::SelectNode ()
     {
       m_linkEstablished = false;
     }
+  m_forward_chain.clear ();
   while (The_Car != ZERO)
     {
+      m_forward_chain.push_back (The_Car);
       double oldp = CalcDist (m_lc_info[The_Car].GetPos (), m_lc_start);
       std::cout<<The_Car.Get () % 256<<"("<<oldp<<","<<m_lc_info[The_Car].minhop<<")";
       m_lc_info[The_Car].appointmentResult = FORWARDER;
@@ -1388,9 +1451,12 @@ RoutingProtocol::SelectNewNodeInAreaZero ()
           m_theFirstCar = The_Car;
           m_lc_info[The_Car].appointmentResult = FORWARDER;
           std::cout<<The_Car.Get () % 256<<"m_lc_info[The_Car].ID_of_minhop == m_theFirstCar"<<std::endl;
+          m_forward_chain.pop_back ();
+          m_forward_chain.push_front (The_Car);
         }
       else
         {
+          m_forward_chain.clear ();
           m_linkEstablished = false;
           ResetAppointmentResult ();
           m_theFirstCar = The_Car;
@@ -1398,6 +1464,7 @@ RoutingProtocol::SelectNewNodeInAreaZero ()
           std::cout<<"Chain ";
           while (m_lc_info.find (The_Car) != m_lc_info.end ())
             {
+              m_forward_chain.push_back (The_Car);
               double oldp = CalcDist (m_lc_info[The_Car].GetPos (), m_lc_start);
               std::cout<<The_Car.Get () % 256<<"("<<oldp<<","<<m_lc_info[The_Car].minhop<<")";
               m_lc_info[The_Car].appointmentResult = FORWARDER;
@@ -1773,6 +1840,34 @@ RoutingProtocol::GetProjection (const Vector3D &vel) const
          ry = m_lc_end.y - m_lc_start.y;
   return (vx*rx + vy*ry)/(sqrt (pow (rx,2.0) + pow (ry, 2.0)));
 }
+
+void
+RoutingProtocol::CalcDontForward (const Ipv4Address& ID)
+{
+  CarInfo& carinfo = m_lc_info[ID];
+  carinfo.list_of_dont_forward.clear ();
+  for (std::list<Ipv4Address>::const_iterator cit = m_forward_chain.begin ();
+       cit != m_forward_chain.end (); ++cit)
+    {
+      if (m_lc_info[*cit].ID_of_minhop != ID)
+        {
+          carinfo.list_of_dont_forward.push_back (*cit);
+        }
+    }
+  if ((ID != m_forward_chain.front ())&&(ID != m_forward_chain.back ()))
+    {
+      for (std::map<Ipv4Address, std::set<Ipv4Address> >::const_iterator cit = m_lc_headNtail.begin ();
+           cit != m_lc_headNtail.end (); ++cit)
+        {
+          for (std::set<Ipv4Address>::const_iterator cit2 = cit->second.begin ();
+               cit2 != cit->second.end (); ++cit2)
+            {
+              carinfo.list_of_dont_forward.push_back (*cit2);
+            }
+        }
+    }
+}
+
 
 } // namespace sdn
 } // namespace ns3
