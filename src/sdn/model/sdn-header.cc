@@ -35,7 +35,8 @@
 #define SDN_ACKHELLO_HEADER_SIZE 44
 #define SDN_DONTFORWARD_HEADER_SIZE 8
 #define SDN_DONTFORWARD_TUPLE_SIZE 4
-
+#define SDN_LC2LC_HEADER_SIZE 8
+#define SDN_LC2LC_TUPLE_SIZE 4
 
 NS_LOG_COMPONENT_DEFINE ("SdnHeader");
 
@@ -233,7 +234,7 @@ MessageHeader::Deserialize (Buffer::Iterator start)
   uint32_t size;
   Buffer::Iterator i = start;
   m_messageType  = (MessageType) i.ReadU8 ();
-  NS_ASSERT (m_messageType >= HELLO_MESSAGE && m_messageType <= LC_ACK_LC);
+  NS_ASSERT (m_messageType >= HELLO_MESSAGE && m_messageType <= LC2LC);
   m_vTime  = i.ReadU8 ();
   m_messageSize  = i.ReadNtohU16 ();
   m_timeToLive  = i.ReadNtohU16 ();
@@ -484,7 +485,7 @@ MessageHeader::AckHello::Deserialize (Buffer::Iterator start,
   return (messageSize);
 }
 
-// ---------------- DONT_FORWARD Routing Message -------------------------------
+// ---------------- DONT_FORWARD Message -------------------------------
 
 uint32_t
 MessageHeader::DontForward::GetSerializedSize (void) const
@@ -543,7 +544,64 @@ MessageHeader::DontForward::Deserialize (Buffer::Iterator start,
   return (messageSize);
 }
 
+// ---------------- LC2LC Message -------------------------------
 
+uint32_t
+MessageHeader::Lc2Lc::GetSerializedSize (void) const
+{
+  return (SDN_LC2LC_HEADER_SIZE +
+    this->list.size () * SDN_LC2LC_TUPLE_SIZE);
+}
+
+void
+MessageHeader::Lc2Lc::Print (std::ostream &os) const
+{
+  /// \todo
+}
+
+void
+MessageHeader::Lc2Lc::Serialize (Buffer::Iterator start) const
+{
+  Buffer::Iterator i = start;
+
+  i.WriteHtonU32 (this->ID.Get());
+  i.WriteHtonU32 (this->list_size);
+
+  for (std::vector<Ipv4Address>::const_iterator cit = this->list.begin ();
+       cit != this->list.end (); ++cit)
+    {
+      i.WriteHtonU32 (cit->Get());
+    }
+}
+
+uint32_t
+MessageHeader::Lc2Lc::Deserialize (Buffer::Iterator start,
+  uint32_t messageSize)
+{
+  Buffer::Iterator i = start;
+
+  this->list.clear ();
+  NS_ASSERT (messageSize >= SDN_LC2LC_HEADER_SIZE);
+
+  uint32_t add_temp = i.ReadNtohU32();
+  this->ID.Set(add_temp);
+  this->list_size = i.ReadNtohU32 ();
+
+  NS_ASSERT ((messageSize - SDN_LC2LC_HEADER_SIZE) %
+    (SDN_DONTFORWARD_TUPLE_SIZE) == 0);
+
+  uint32_t numTuples = (messageSize - SDN_LC2LC_HEADER_SIZE)
+    / (SDN_LC2LC_TUPLE_SIZE);
+  NS_ASSERT ( numTuples == this->list_size );
+
+  for (uint32_t n = 0; n < numTuples; ++n)
+  {
+    uint32_t temp = i.ReadNtohU32();
+    this->list.push_back (Ipv4Address (temp));
+   }
+
+  return (messageSize);
+}
 
 }
 }  // namespace sdn, ns3

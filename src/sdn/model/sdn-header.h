@@ -127,8 +127,7 @@ public:
     APPOINTMENT_MESSAGE,
     ACKHELLO_MESSAGE,
     DONT_FORWARD,
-    LC2LC,
-    LC_ACK_LC
+    LC2LC
   };
 
   MessageHeader ();
@@ -485,7 +484,6 @@ public:
   };
 
 
-//TODO
   //  DONT_FORWARD Message Format
   //
   //        0                   1                   2                   3
@@ -517,6 +515,35 @@ public:
 
 
 
+  //  LC2LC Message Format
+  //
+  //        0                   1                   2                   3
+  //        0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+  //
+  //       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+  //       |                      SourceLC (IP Address)                    |
+  //       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+  //       |                           List Size                           |
+  //       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+  //       |                       ID1 (IP Address)                        |
+  //       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+  //       |                       ID2 (IP Address)                        |
+  //       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+  //       :                                                               :
+  //       :                               :
+
+  struct Lc2Lc
+  {
+    Ipv4Address ID;
+    uint32_t list_size;
+    std::vector<Ipv4Address> list;
+
+    void Print (std::ostream &os) const;
+    uint32_t GetSerializedSize (void) const;
+    void Serialize (Buffer::Iterator start) const;
+    uint32_t Deserialize (Buffer::Iterator start, uint32_t messageSize);
+  };
+
 
 private:
   struct
@@ -526,6 +553,7 @@ private:
     Appointment appointment;
     AckHello ackhello;
     DontForward dontforward;
+    Lc2Lc lc2lc;
   } m_message; // union not allowed
 
 public:
@@ -595,6 +623,19 @@ public:
     return (m_message.dontforward);
   }
 
+  Lc2Lc& GetLc2Lc ()
+  {
+    if (m_messageType == 0)
+      {
+        m_messageType = LC2LC;
+      }
+    else
+      {
+        NS_ASSERT (m_messageType == LC2LC);
+      }
+    return (m_message.lc2lc);
+  }
+
   const Hello& GetHello () const
   {
     NS_ASSERT (m_messageType == HELLO_MESSAGE);
@@ -623,6 +664,12 @@ public:
   {
     NS_ASSERT (m_messageType == DONT_FORWARD);
     return (m_message.dontforward);
+  }
+
+  const Lc2Lc& GetLc2Lc () const
+  {
+    NS_ASSERT (m_messageType == LC2LC);
+    return (m_message.lc2lc);
   }
 };
 
