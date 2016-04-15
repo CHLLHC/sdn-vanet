@@ -580,10 +580,11 @@ void
 RoutingProtocol::ProcessLc2Lc (const sdn::MessageHeader &msg, const Ipv4Address &sour)
 {
   NS_LOG_FUNCTION (msg);
-
+  std::cout<<"RoutingProtocol::ProcessLc2Lc!RoutingProtocol::ProcessLc2Lc!"<<std::endl;
   const sdn::MessageHeader::Lc2Lc &lc2lc = msg.GetLc2Lc ();
   if (lc2lc.ID == sour)
     {
+      std::cout<<"lc2lc.ID == sour!lc2lc.ID == sour!"<<std::endl;
       Time now = Simulator::Now();
       NS_LOG_DEBUG ("@" << now.GetSeconds() << ":Node " << m_mainAddress
                     << "ProcessLc2Lc.");
@@ -1333,7 +1334,7 @@ RoutingProtocol::SortByDistance (int area)
   for (std::list<std::pair<double, Ipv4Address> >::const_iterator cit = templist.begin ();
        cit != templist.end (); ++cit)
     {
-      //std::cout<<cit->second.Get () % 256<<":"<<cit->first<<std::endl;
+      std::cout<<cit->second.Get () % 256<<":"<<cit->first<<std::endl;
       m_list4sort.push_back (cit->second);
     }
 }
@@ -1710,7 +1711,7 @@ RoutingProtocol::GetArea (Vector3D position) const
       road_length -= 0.5*m_signal_range;
       int numOfTrivialArea = road_length / m_signal_range;
       double remain = road_length - (numOfTrivialArea * m_signal_range);
-      if (!(remain>0))
+      if (remain<0.5*m_signal_range)
         numOfTrivialArea--;
 
       distance -= 0.5*m_signal_range;
@@ -1732,9 +1733,7 @@ RoutingProtocol::GetArea (Vector3D position) const
               return numOfTrivialArea + 1;
             }
         }
-
     }
-
 }
 
 int
@@ -1757,21 +1756,26 @@ RoutingProtocol::Init_NumArea ()
       road_length -= 0.5*m_signal_range;
       int numOfTrivialArea = road_length / m_signal_range;
       double last_length = road_length - (m_signal_range * numOfTrivialArea);
-      if (last_length < 1e-10)//last_length == 0 Devied the last TrivialArea into 2
+      if (last_length < 0.5*m_signal_range)
         {
-          ret = 1 + (numOfTrivialArea - 1) + 1 + 1;//First Area + TrivialArea-1 + Padding + LastArea;
-          m_isPadding = true;
+          numOfTrivialArea--;
+          last_length += m_signal_range;
+        }
+      if ((last_length-0.5*m_signal_range) < 1e-10)//last_length == 0.5r
+        {
+          ret = 1 + numOfTrivialArea + 1;//First Area + TrivialArea + LastArea;
+          m_isPadding = false;
         }
       else
-        if (last_length > 0.5*m_signal_range)//0.5r<last_length<r
+        if (last_length > m_signal_range)//r<last_length
           {
-            ret = 1 + numOfTrivialArea + 2;//First Area + TrivialArea + paddingArea +LastArea;
+            ret = 1 + numOfTrivialArea + 2;//First Area + TrivialArea + paddingArea(>0.5r) +LastArea(0.5r);
             m_isPadding = true;
           }
-        else//0<last_length<0.5r
+        else//0.5r<last_length<r
           {
-            ret = 1 + numOfTrivialArea + 1;//First Area + TrivialArea + LastArea;
-            m_isPadding = false;
+            ret = 1 + numOfTrivialArea + 2;//First Area + TrivialArea + PaddingArea(<0.5r) +LastArea(0.5r);
+            m_isPadding = true;
           }
     }
   m_numArea = ret;

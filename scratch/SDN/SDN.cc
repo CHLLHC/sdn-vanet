@@ -30,8 +30,8 @@ VanetSim::VanetSim()
 	freq2 = 5.890e9;  //802.11p CCH CH178
 	txp1 = 20;  // dBm SCH
 	txp2 = 20;  // CCH
-	range1 = 400.0;//SCH
-	range2 = 1000.0;//CCH
+	range1 = 200.0;//SCH
+	range2 = 600.0;//CCH
 	packetSize = 1000; // bytes
 	numPackets = 1;
 	interval = 0.1; // seconds
@@ -139,7 +139,7 @@ void VanetSim::LoadTraffic()
 
 void VanetSim::ConfigNode()
 {
-	m_nodes.Create(nodeNum+3);//Cars + Controller + Source + Sink
+	m_nodes.Create(nodeNum+4);//Cars + Controller + Source + Sink
 	/*Only Apps Are Different Between Different kind of Nodes*/
 	// Name nodes
 	for (uint32_t i = 0; i < nodeNum; ++i)
@@ -151,6 +151,7 @@ void VanetSim::ConfigNode()
 	Names::Add("Controller",m_nodes.Get(nodeNum));
 	Names::Add("Source",m_nodes.Get(nodeNum+1));
 	Names::Add("Sink",m_nodes.Get(nodeNum+2));
+  Names::Add("LC2",m_nodes.Get(nodeNum+3));
 }
 
 void VanetSim::ConfigChannels()
@@ -243,11 +244,13 @@ void VanetSim::ConfigMobility()
 	Time temp_now = Simulator::Now();
 	std::cout<<"Now?"<<temp_now.GetSeconds ()<<std::endl;
 	Ptr<MobilityModel> Temp = m_nodes.Get(nodeNum)->GetObject<MobilityModel>();//Controller
-	Temp->SetPosition(Vector(0.0, 0.0, 0.0));
+	Temp->SetPosition(Vector(250.0, 0.0, 0.0));
 	Temp = m_nodes.Get(nodeNum+1)->GetObject<MobilityModel>();//source
 	Temp->SetPosition(Vector(5.1, 0.0, 0.0));
 	Temp = m_nodes.Get(nodeNum+2)->GetObject<MobilityModel>();//Sink
 	Temp->SetPosition(Vector(1000.0, 0.0, 0.0));
+	Temp = m_nodes.Get(nodeNum+3)->GetObject<MobilityModel>();//LC2
+	Temp->SetPosition(Vector(750.0, 0.0, 0.0));
 }
 
 void VanetSim::ConfigApp()
@@ -270,9 +273,11 @@ void VanetSim::ConfigApp()
 	      sdn.SetNodeTypeMap (m_nodes.Get (i), sdn::CAR);
 	    }
 	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum), sdn::LOCAL_CONTROLLER);
-	  sdn.ExcludeInterface (m_nodes.Get (nodeNum), 0);
+	  //sdn.ExcludeInterface (m_nodes.Get (nodeNum), 0);
 	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+1), sdn::CAR);//Treat Source and Sink as CAR
 	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+2), sdn::CAR);
+
+	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+3), sdn::CAR);//LC2
 	  sdn.SetSR (range1);
 	  internet.SetRoutingHelper(sdn);
 		std::cout<<"SetRoutingHelper Done"<<std::endl;
@@ -305,7 +310,9 @@ void VanetSim::ConfigApp()
 		  }
 		Ptr<sdn::RoutingProtocol> routing =
 		            m_nodes.Get (nodeNum)->GetObject<sdn::RoutingProtocol> ();
-		routing->SetControllArea (Vector2D (0,0), Vector2D (1000,-10));
+		routing->SetControllArea (Vector2D (0,10), Vector2D (500,-10));
+		routing = m_nodes.Get (nodeNum+3)->GetObject<sdn::RoutingProtocol> ();
+		routing->SetControllArea (Vector2D (500,10), Vector2D (1000,-10));
 	}
 
 
@@ -319,7 +326,7 @@ void VanetSim::ConfigApp()
 	Address remote (InetSocketAddress(bcast, m_port));
 	OnOffHelper Source("ns3::UdpSocketFactory",remote);//SendToSink
 	Source.SetAttribute("OffTime",StringValue ("ns3::ConstantRandomVariable[Constant=0.0]"));
-
+	//Source.SetAttribute("PacketSize", UintegerValue (packetSize));
 
 	m_source = Source.Install(m_nodes.Get(nodeNum+1));//Insatll on Source
 	m_source.Stop(Seconds(duration));//Default Start time is 0.
@@ -384,29 +391,35 @@ void VanetSim::ProcessOutputs()
 	std::cout<<"Unique_RX_Pkts: "<<Unique_RX_Pkts<<std::endl;
 
 
-	int64_t best = delay_vector[0],
-	        worst = delay_vector[0];
-	double avg = 0;
-	for (std::vector<int64_t>::const_iterator cit = delay_vector.begin ();
-	     cit != delay_vector.end ();++cit)
+	if (!delay_vector.empty ())
 	  {
-	    if (*cit<best)
-	      {
-	        best = *cit;
-	      }
+      int64_t best = delay_vector[0],
+              worst = delay_vector[0];
+      double avg = 0;
+      for (std::vector<int64_t>::const_iterator cit = delay_vector.begin ();
+           cit != delay_vector.end ();++cit)
+        {
+          if (*cit<best)
+            {
+              best = *cit;
+            }
 
-	    if (*cit>worst)
-	      {
-	        worst = *cit;
-	      }
-	    avg += *cit;
+          if (*cit>worst)
+            {
+              worst = *cit;
+            }
+          avg += *cit;
+        }
+
+      avg /= delay_vector.size();
+      std::cout<<"Best delay:   "<<best<<"us"<<std::endl;
+      std::cout<<"Worst delay:   "<<worst<<"us"<<std::endl;
+      std::cout<<"Avg delay: "<<avg<<"us"<<std::endl;
 	  }
-
-	avg /= delay_vector.size();
-	std::cout<<"Best delay:   "<<best<<"us"<<std::endl;
-	std::cout<<"Worst delay:   "<<worst<<"us"<<std::endl;
-	std::cout<<"Avg delay: "<<avg<<"us"<<std::endl;
-
+	else
+	  {
+	    std::cout<<"NO PACKETS WERE RECEIVED."<<std::endl;
+	  }
 }
 
 void VanetSim::Run()
