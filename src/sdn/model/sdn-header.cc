@@ -182,7 +182,9 @@ MessageHeader::GetSerializedSize (void) const
     case DONT_FORWARD:
       size += m_message.dontforward.GetSerializedSize ();
       break;
-
+    case LC2LC:
+      size += m_message.lc2lc.GetSerializedSize ();
+      break;
     default:
       NS_ASSERT (false);
     }
@@ -221,6 +223,9 @@ MessageHeader::Serialize (Buffer::Iterator start) const
       break;
     case DONT_FORWARD:
       m_message.dontforward.Serialize (i);
+      break;
+    case LC2LC:
+      m_message.lc2lc.Serialize (i);
       break;
     default:
       NS_ASSERT (false);
@@ -262,6 +267,11 @@ MessageHeader::Deserialize (Buffer::Iterator start)
       size +=
         m_message.dontforward.Deserialize (i, m_messageSize - SDN_MSG_HEADER_SIZE);
       break;
+    case LC2LC:
+      size +=
+        m_message.lc2lc.Deserialize (i, m_messageSize - SDN_MSG_HEADER_SIZE);
+      break;
+
     default:
       NS_ASSERT (false);
     }

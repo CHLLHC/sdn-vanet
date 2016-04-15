@@ -259,7 +259,9 @@ private:
   void SendAppointment ();
   void SendAckHello (const Ipv4Address& ID);
   void SendDontForward (const Ipv4Address& ID);
+  void SendLc2Lc ();
 
+  void ProcessLc2Lc (const sdn::MessageHeader &msg, const Ipv4Address& sour);
   void ProcessDontForward (const sdn::MessageHeader &msg);
   void ProcessAckHello (const sdn::MessageHeader &msg);
   void ProcessAppointment (const sdn::MessageHeader &msg);

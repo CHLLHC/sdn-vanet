@@ -420,6 +420,14 @@ RoutingProtocol::RecvSDN (Ptr<Socket> socket)
             ProcessDontForward (messageHeader);
           break;
 
+        case sdn::MessageHeader::LC2LC:
+          NS_LOG_DEBUG (Simulator::Now ().GetSeconds ()
+                        << "s SDN node " << m_mainAddress
+                        << " received LC2LC message of size "
+                        << messageHeader.GetSerializedSize ());
+          if (GetType() == LOCAL_CONTROLLER)
+            ProcessLc2Lc (messageHeader, senderIfaceAddr);
+          break;
         default:
           NS_LOG_DEBUG ("SDN message type " <<
                         int (messageHeader.GetMessageType ()) <<
@@ -437,35 +445,38 @@ RoutingProtocol::ProcessHM (const sdn::MessageHeader &msg)
       <<msg.GetHello ().ID.Get ()%256<<" Speed:"
       <<msg.GetHello ().GetVelocity ().x<<std::endl;
   */
-  Ipv4Address ID = msg.GetHello ().ID;
-  std::map<Ipv4Address, CarInfo>::iterator it = m_lc_info.find (ID);
-
-  if (it != m_lc_info.end ())
+  if (IsInMyArea (msg.GetHello ().GetPosition ()))
     {
-      it->second.Active = true;
-      it->second.LastActive = Simulator::Now ();
-      it->second.Position = msg.GetHello ().GetPosition ();
-      it->second.Velocity = msg.GetHello ().GetVelocity ();
-      if (it->second.Velocity.x+it->second.Velocity.y+it->second.Velocity.z < 1)//To privent Dead Point
-        {
-          it->second.Velocity.z = 10;
-        }
-    }
-  else
-    {
-      CarInfo CI_temp;
-      CI_temp.Active = true;
-      CI_temp.LastActive = Simulator::Now ();
-      CI_temp.Position = msg.GetHello ().GetPosition ();
-      CI_temp.Velocity = msg.GetHello ().GetVelocity ();
-      if (CI_temp.Velocity.x+CI_temp.Velocity.y+CI_temp.Velocity.z < 1)//To privent Dead Point
-        {
-          CI_temp.Velocity.z = 10;
-        }
-      m_lc_info[ID] = CI_temp;
-    }
+      Ipv4Address ID = msg.GetHello ().ID;
+      std::map<Ipv4Address, CarInfo>::iterator it = m_lc_info.find (ID);
 
-  SendAckHello (ID);
+      if (it != m_lc_info.end ())
+        {
+          it->second.Active = true;
+          it->second.LastActive = Simulator::Now ();
+          it->second.Position = msg.GetHello ().GetPosition ();
+          it->second.Velocity = msg.GetHello ().GetVelocity ();
+          if (it->second.Velocity.x+it->second.Velocity.y+it->second.Velocity.z < 1)//To privent Dead Point
+            {
+              it->second.Velocity.z = 10;
+            }
+        }
+      else
+        {
+          CarInfo CI_temp;
+          CI_temp.Active = true;
+          CI_temp.LastActive = Simulator::Now ();
+          CI_temp.Position = msg.GetHello ().GetPosition ();
+          CI_temp.Velocity = msg.GetHello ().GetVelocity ();
+          if (CI_temp.Velocity.x+CI_temp.Velocity.y+CI_temp.Velocity.z < 1)//To privent Dead Point
+            {
+              CI_temp.Velocity.z = 10;
+            }
+          m_lc_info[ID] = CI_temp;
+        }
+
+      SendAckHello (ID);
+    }
   //std::cout<<"V:"<<m_lc_info[ID].Velocity.x<<std::endl;
 }
 
@@ -552,7 +563,7 @@ RoutingProtocol::ProcessDontForward (const sdn::MessageHeader &msg)
     {
       Time now = Simulator::Now();
       NS_LOG_DEBUG ("@" << now.GetSeconds() << ":Node " << m_mainAddress
-                    << "ProcessRm.");
+                    << "ProcessDontForward.");
 
       NS_ASSERT (dontforward.list_size >= 0);
 
@@ -561,6 +572,32 @@ RoutingProtocol::ProcessDontForward (const sdn::MessageHeader &msg)
            cit != dontforward.list.end (); ++cit)
         {
           m_dont_forward.insert (*cit);
+        }
+    }
+}
+
+void
+RoutingProtocol::ProcessLc2Lc (const sdn::MessageHeader &msg, const Ipv4Address &sour)
+{
+  NS_LOG_FUNCTION (msg);
+
+  const sdn::MessageHeader::Lc2Lc &lc2lc = msg.GetLc2Lc ();
+  if (lc2lc.ID == sour)
+    {
+      Time now = Simulator::Now();
+      NS_LOG_DEBUG ("@" << now.GetSeconds() << ":Node " << m_mainAddress
+                    << "ProcessLc2Lc.");
+
+      NS_ASSERT (lc2lc.list_size >= 0);
+
+      if (m_lc_headNtail.find (lc2lc.ID) != m_lc_headNtail.end ())
+        {
+          m_lc_headNtail[lc2lc.ID].clear ();
+        }
+      for (std::vector<Ipv4Address>::const_iterator cit = lc2lc.list.begin ();
+           cit != lc2lc.list.end (); ++cit)
+        {
+          m_lc_headNtail[lc2lc.ID].insert (*cit);
         }
     }
 }
@@ -1093,6 +1130,25 @@ RoutingProtocol::SendDontForward (const Ipv4Address& ID)
   QueueMessage (msg, JITTER);
 }
 
+void
+RoutingProtocol::SendLc2Lc ()
+{
+  NS_LOG_FUNCTION (this);
+  sdn::MessageHeader msg;
+  Time now = Simulator::Now ();
+  msg.SetVTime (m_helloInterval);
+  msg.SetTimeToLive (41993);//Just MY Birthday.
+  msg.SetMessageSequenceNumber (GetMessageSequenceNumber ());
+  msg.SetMessageType (sdn::MessageHeader::LC2LC);
+  sdn::MessageHeader::Lc2Lc &lc2lc = msg.GetLc2Lc ();
+  lc2lc.ID = m_mainAddress;
+
+  lc2lc.list.push_back (m_forward_chain.front ());
+  lc2lc.list.push_back (m_forward_chain.back ());
+
+  lc2lc.list_size = lc2lc.list.size ();
+  QueueMessage (msg, JITTER);
+}
 
 void
 RoutingProtocol::SetMobility (Ptr<MobilityModel> mobility)
@@ -1140,6 +1196,8 @@ RoutingProtocol::ComputeRoute ()
           CalcDontForward (*cit);
           SendDontForward (*cit);
         }
+      std::cout<<"SendLC2LC"<<std::endl;
+      SendLc2Lc ();
     }
   std::cout<<"Reschedule"<<std::endl;
   Reschedule ();
