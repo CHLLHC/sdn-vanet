@@ -40,10 +40,11 @@
 #include <map>
 #include <set>
 
-
 namespace ns3 {
 namespace sdn {
 
+std::string
+Ipv4toString (const Ipv4Address& address);
 
 enum NodeType {CAR, LOCAL_CONTROLLER, OTHERS};
 

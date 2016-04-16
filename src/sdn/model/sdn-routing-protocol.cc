@@ -49,6 +49,8 @@
 
 #include "stdlib.h" //ABS
 
+#include <ostream>
+
 /********** Useful macros **********/
 
 ///
@@ -88,6 +90,13 @@ namespace sdn {
 
 NS_LOG_COMPONENT_DEFINE ("SdnRoutingProtocol");
 
+std::string
+Ipv4toString (const Ipv4Address& address)
+{
+  std::ostringstream buffer("");
+  address.Print (buffer);
+  return buffer.str ();
+}
 
 /********** SDN controller class **********/
 
@@ -206,39 +215,6 @@ RoutingProtocol::PrintRoutingTable (Ptr<OutputStreamWrapper> stream) const
 void 
 RoutingProtocol::DoInitialize ()
 {
-  if (m_mainAddress == Ipv4Address ())
-    {
-      Ipv4Address loopback ("127.0.0.1");
-      uint32_t count = 0;
-      for (uint32_t i = 0; i < m_ipv4->GetNInterfaces (); ++i)
-        {
-          // CAR Use first address as ID
-          // LC Use secend address as ID
-          Ipv4Address addr = m_ipv4->GetAddress (i, 0).GetLocal ();
-          if (addr != loopback)
-            {
-              if (m_nodetype == CAR)
-                {
-                  m_mainAddress = addr;
-                  break;
-                }
-              else
-                if (m_nodetype == LOCAL_CONTROLLER)
-                  {
-                    if (count == 1)
-                      {
-                        m_mainAddress = addr;
-                        break;
-                      }
-                    ++count;
-                  }
-            }
-        }
-
-      NS_ASSERT (m_mainAddress != Ipv4Address ());
-    }
-
-  NS_LOG_DEBUG ("Starting SDN on node " << m_mainAddress);
 
   Ipv4Address loopback ("127.0.0.1");
 
@@ -522,11 +498,11 @@ RoutingProtocol::ProcessAppointment (const sdn::MessageHeader &msg)
       switch (appointment.ATField)
       {
         case NORMAL:
-          std::cout<<"CAR:"<<m_mainAddress.Get () % 256<<"  ProcessAppointment";
+          std::cout<<"CAR:"<<Ipv4toString (m_mainAddress)<<"  ProcessAppointment";
           std::cout<<" \"NORMAL\""<<std::endl;
           break;
         case FORWARDER:
-          std::cout<<"CAR:"<<m_mainAddress.Get () % 256<<"  ProcessAppointment";
+          std::cout<<"CAR:"<<Ipv4toString (m_mainAddress)<<"  ProcessAppointment";
           std::cout<<" \"FORWARDER\""<<std::endl;
           break;
         default:
@@ -755,7 +731,7 @@ RoutingProtocol::RouteInput(Ptr<const Packet> p,
           broadcastRoute->SetGateway (dest);//broadcast
           broadcastRoute->SetOutputDevice (m_ipv4->GetNetDevice (m_SCHinterface));
           Ipv4Header ipHeader = header;
-          ipHeader.SetSource (m_mainAddress); //To Prevent Brocast Storm
+          ipHeader.SetSource (m_ipv4->GetAddress (m_SCHinterface,0).GetLocal ()); //To Prevent Brocast Storm, m_mainAddress is for CCH.
           ipHeader.SetTtl (ipHeader.GetTtl () - 1);
           if (ipHeader.GetTtl ()!=0)
             {
@@ -932,7 +908,7 @@ RoutingProtocol::SendPacket (Ptr<Packet> packet,
   NS_LOG_DEBUG ("SDN node " << m_mainAddress << " sending a SDN packet");
   // Add a header
   sdn::PacketHeader header;
-  header.originator = this->m_mainAddress;
+  header.originator = this->m_mainAddress;//CCH Address
   header.SetPacketLength (header.GetSerializedSize () + packet->GetSize ());
   header.SetPacketSequenceNumber (GetPacketSequenceNumber ());
   packet->AddHeader (header);
@@ -1012,6 +988,10 @@ RoutingProtocol::IsMyOwnAddress (const Ipv4Address & a) const
           return true;
         }
     }
+  if (a == m_ipv4->GetAddress (m_SCHinterface,0).GetLocal ())
+    {
+      return true;
+    }
   return false;
 }
 
@@ -1027,7 +1007,7 @@ RoutingProtocol::SendHello ()
   msg.SetMessageType (sdn::MessageHeader::HELLO_MESSAGE);
 
   sdn::MessageHeader::Hello &hello = msg.GetHello ();
-  hello.ID = m_mainAddress;
+  hello.ID = m_ipv4->GetAddress (m_SCHinterface,0).GetLocal ();
   Vector pos = m_mobility->GetPosition ();
   Vector vel = m_mobility->GetVelocity ();
   hello.SetPosition (pos.x, pos.y, pos.z);
@@ -1142,7 +1122,7 @@ RoutingProtocol::SendLc2Lc ()
   msg.SetMessageSequenceNumber (GetMessageSequenceNumber ());
   msg.SetMessageType (sdn::MessageHeader::LC2LC);
   sdn::MessageHeader::Lc2Lc &lc2lc = msg.GetLc2Lc ();
-  lc2lc.ID = m_mainAddress;
+  lc2lc.ID = m_mainAddress;//CCH Address.
 
   lc2lc.list.push_back (m_forward_chain.front ());
   lc2lc.list.push_back (m_forward_chain.back ());
@@ -1194,7 +1174,7 @@ RoutingProtocol::ComputeRoute ()
       for (std::list<Ipv4Address>::const_iterator cit = m_forward_chain.begin ();
            cit != m_forward_chain.end (); ++cit)
         {
-          std::cout<<cit->Get ()%256<<"("<<CalcDist (m_lc_info[*cit].GetPos (),m_lc_start)<<"),"<<std::endl;
+          std::cout<<Ipv4toString((*cit))<<"("<<CalcDist (m_lc_info[*cit].GetPos (),m_lc_start)<<"),"<<std::endl;
           CalcDontForward (*cit);
           SendDontForward (*cit);
         }

@@ -89,7 +89,7 @@ void SumoMobility::Install()
 		    NodeList::GetNode (CarNumber)->GetObject<MobilityModel> ()->GetObject<WaypointMobilityModel> ();
 		//Add a initial position(10000,10000,10000)
 		if ((*((*vehicle).trace).begin()).time >= 1.0)
-		  waypointmodel->AddWaypoint(Waypoint(Seconds((*((*vehicle).trace).begin()).time-1.0),Vector(10000.0,10000.0,10000.0)));
+		  waypointmodel->AddWaypoint(Waypoint(Seconds((*((*vehicle).trace).begin()).time-1.0),Vector(10000.0 + CarNumber * 10000.0,10000.0,10000.0)));
 		// Add the trace into the way point model
 		for(vector<Trace>::const_iterator t=(*vehicle).trace.begin();t!=(*vehicle).trace.end();t++)
 		{
@@ -101,7 +101,7 @@ void SumoMobility::Install()
 			waypointmodel->AddWaypoint(wp);
 		}
 		//Add a final position(-10000,-10000,-10000)
-		waypointmodel->AddWaypoint(Waypoint(Seconds(end_time+0.1),Vector(-10000.0,-10000.0,-10000.0)));
+		waypointmodel->AddWaypoint(Waypoint(Seconds(end_time+0.1),Vector(-10000.0 - CarNumber * 10000.0,-10000.0,-10000.0)));
 		std::cout<<CarNumber<<",";
 		CarNumber++;
 	}
