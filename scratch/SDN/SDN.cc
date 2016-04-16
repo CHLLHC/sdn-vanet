@@ -30,8 +30,8 @@ VanetSim::VanetSim()
 	freq2 = 5.890e9;  //802.11p CCH CH178
 	txp1 = 20;  // dBm SCH
 	txp2 = 20;  // CCH
-	range1 = 200.0;//SCH
-	range2 = 600.0;//CCH
+	range1 = 400.0;//SCH
+	range2 = 1000.0;//CCH
 	packetSize = 1000; // bytes
 	numPackets = 1;
 	interval = 0.1; // seconds
@@ -187,12 +187,12 @@ void VanetSim::ConfigChannels()
 	Ptr<YansWifiChannel> CCH = CCHChannel.Create();
 
 	//===wifiphy
-	YansWifiPhyHelper SCHPhy =  YansWifiPhyHelper::Default ();
-	SCHPhy.SetChannel (SCH);
-	SCHPhy.SetPcapDataLinkType (YansWifiPhyHelper::DLT_IEEE802_11);
-	YansWifiPhyHelper CCHPhy =  YansWifiPhyHelper::Default ();
-	CCHPhy.SetChannel (CCH);
-	CCHPhy.SetPcapDataLinkType (YansWifiPhyHelper::DLT_IEEE802_11);
+	m_SCHPhy =  YansWifiPhyHelper::Default ();
+	m_SCHPhy.SetChannel (SCH);
+	m_SCHPhy.SetPcapDataLinkType (YansWifiPhyHelper::DLT_IEEE802_11_RADIO);
+	m_CCHPhy =  YansWifiPhyHelper::Default ();
+	m_CCHPhy.SetChannel (CCH);
+	m_CCHPhy.SetPcapDataLinkType (YansWifiPhyHelper::DLT_IEEE802_11_RADIO);
 
 	// 802.11p mac
 	NqosWaveMacHelper SCH80211pMac = NqosWaveMacHelper::Default ();
@@ -208,14 +208,14 @@ void VanetSim::ConfigChannels()
 											"ControlMode",StringValue (phyMode));
 
 	// Set Tx Power For The SCH
-	SCHPhy.Set ("TxPowerStart",DoubleValue (txp1));
-	SCHPhy.Set ("TxPowerEnd", DoubleValue (txp1));
-	m_SCHDevices = SCH80211p.Install(SCHPhy, SCH80211pMac, m_nodes);
+	m_SCHPhy.Set ("TxPowerStart",DoubleValue (txp1));
+	m_SCHPhy.Set ("TxPowerEnd", DoubleValue (txp1));
+	m_SCHDevices = SCH80211p.Install(m_SCHPhy, SCH80211pMac, m_nodes);
 
 	// CCH
-	CCHPhy.Set ("TxPowerStart",DoubleValue (txp2));
-	CCHPhy.Set ("TxPowerEnd", DoubleValue (txp2));
-	m_CCHDevices = CCH80211p.Install(CCHPhy, CCH80211pMac, m_nodes);
+	m_CCHPhy.Set ("TxPowerStart",DoubleValue (txp2));
+	m_CCHPhy.Set ("TxPowerEnd", DoubleValue (txp2));
+	m_CCHDevices = CCH80211p.Install(m_CCHPhy, CCH80211pMac, m_nodes);
 
 }
 
@@ -274,10 +274,10 @@ void VanetSim::ConfigApp()
 	    }
 	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum), sdn::LOCAL_CONTROLLER);
 	  //sdn.ExcludeInterface (m_nodes.Get (nodeNum), 0);
-	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+1), sdn::CAR);//Treat Source and Sink as CAR
-	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+2), sdn::CAR);
+	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+1), sdn::OTHERS);//Source
+	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+2), sdn::OTHERS);//Sink
 
-	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+3), sdn::CAR);//LC2
+	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+3), sdn::OTHERS);//LC2
 	  sdn.SetSR (range1);
 	  internet.SetRoutingHelper(sdn);
 		std::cout<<"SetRoutingHelper Done"<<std::endl;
@@ -310,7 +310,7 @@ void VanetSim::ConfigApp()
 		  }
 		Ptr<sdn::RoutingProtocol> routing =
 		            m_nodes.Get (nodeNum)->GetObject<sdn::RoutingProtocol> ();
-		routing->SetControllArea (Vector2D (0,10), Vector2D (500,-10));
+		routing->SetControllArea (Vector2D (0,10), Vector2D (1000,-10));
 		routing = m_nodes.Get (nodeNum+3)->GetObject<sdn::RoutingProtocol> ();
 		routing->SetControllArea (Vector2D (500,10), Vector2D (1000,-10));
 	}
@@ -348,6 +348,10 @@ void VanetSim::ConfigApp()
 	InetSocketAddress local = InetSocketAddress(Ipv4Address::GetZero (),m_port);
 	sink->Bind(local);
 	sink->SetRecvCallback(MakeCallback(&VanetSim::ReceiveDataPacket, this));
+
+
+	//Trace
+	m_SCHPhy.EnablePcap ("sdn-vanet", m_SCHDevices);
 }
 
 void VanetSim::ReceiveDataPacket(Ptr<Socket> socket)
@@ -367,7 +371,7 @@ void VanetSim::ReceiveDataPacket(Ptr<Socket> socket)
 	      }
       Rx_Data_Bytes += packet->GetSize();
       Rx_Data_Pkts++;
-      std::cout<<".";
+      //std::cout<<".";
 	  }
 }
 
@@ -438,6 +442,9 @@ void VanetSim::Look_at_clock()
   std::cout<<"Tx_Data_Pkts:   "<<Tx_Data_Pkts<<std::endl;
   std::cout<<"Rx_Data_Pkts:   "<<Rx_Data_Pkts<<std::endl;
   std::cout<<"Unique_RX_Pkts: "<<Unique_RX_Pkts<<std::endl;
+
+  os<<Simulator::Now().GetSeconds()<<","<<Tx_Data_Pkts<<","<<Rx_Data_Pkts<<","<<Unique_RX_Pkts<<std::endl;
+
 	/*Ptr<MobilityModel> Temp = m_nodes.Get (nodeNum)->GetObject<MobilityModel>();
   std::cout<<Temp->GetPosition().x<<","<<Temp->GetPosition().y<<","<<Temp->GetPosition().z<<std::endl;
   std::cout<<Temp->GetVelocity().x<<","<<Temp->GetVelocity().y<<","<<Temp->GetVelocity().z<<std::endl;

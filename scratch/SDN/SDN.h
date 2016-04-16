@@ -76,6 +76,7 @@ private:
 	int pmod;//0=Range(Default) 1=Other
 	uint32_t nodeNum;
 	double duration;
+	YansWifiPhyHelper m_SCHPhy, m_CCHPhy;
 	NodeContainer m_nodes;//Cars + Controller + Source + Sink
 	NetDeviceContainer m_SCHDevices, m_CCHDevices;
 	Ipv4InterfaceContainer m_SCHInterfaces, m_CCHInterfaces;

@@ -150,7 +150,8 @@ SdnHelper::SetNodeTypeMap (Ptr<Node> node, sdn::NodeType nt)
 
   if (it != m_ntmap.end() )
     {
-      std::cout<<"Duplicate NodeType on Node: "<< node->GetId()<<std::endl;
+      std::string temp = "Duplicate NodeType on Node: " + std::to_string (node->GetId());
+      NS_ASSERT_MSG (false, temp);
     }
   m_ntmap[node] = nt;
 }
