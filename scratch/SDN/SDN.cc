@@ -351,7 +351,7 @@ void VanetSim::ConfigApp()
 
 
 	//Trace
-	m_SCHPhy.EnablePcap ("pcap/sdn-vanet", m_SCHDevices);
+	//m_SCHPhy.EnablePcap ("pcap/sdn-vanet", m_SCHDevices);
 }
 
 void VanetSim::ReceiveDataPacket(Ptr<Socket> socket)

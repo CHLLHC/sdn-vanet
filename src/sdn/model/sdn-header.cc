@@ -487,10 +487,10 @@ MessageHeader::AckHello::Deserialize (Buffer::Iterator start,
   this->velocity.X = i.ReadNtohU32();
   this->velocity.Y = i.ReadNtohU32();
   this->velocity.Z = i.ReadNtohU32();
-  this->position.Z = i.ReadNtohU32();
-  this->velocity.X = i.ReadNtohU32();
-  this->velocity.Y = i.ReadNtohU32();
-  this->velocity.Z = i.ReadNtohU32();
+  this->start.X = i.ReadNtohU32();
+  this->start.Y = i.ReadNtohU32();
+  this->end.X = i.ReadNtohU32();
+  this->end.Y = i.ReadNtohU32();
 
   return (messageSize);
 }

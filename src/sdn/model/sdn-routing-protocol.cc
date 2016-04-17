@@ -525,6 +525,9 @@ RoutingProtocol::ProcessAckHello (const sdn::MessageHeader &msg)
       m_car_lc_ack_vaild = true;
       m_lc_start = ackhello.GetControllArea_Start ();
       m_lc_end = ackhello.GetControllArea_End ();
+      /*std::cout<<Ipv4toString (ackhello.ID)<<",ACK "
+               <<m_lc_start.x<<","<<m_lc_start.y<<";"
+               <<m_lc_end.x<<","<<m_lc_end.y<<std::endl;*/
       m_lc_controllArea_vaild = true;
     }
 }
@@ -722,6 +725,16 @@ RoutingProtocol::RouteInput(Ptr<const Packet> p,
           ecb (p, header, Socket::ERROR_NOROUTETOHOST);
           return false;
         }
+
+      if ((m_appointmentResult == FORWARDER)&&(!IsInMyArea (m_mobility->GetPosition ()))&&(m_lc_controllArea_vaild))
+        {
+          std::cout<<"!IsInMyArea"<<Ipv4toString (m_mainAddress)
+                   <<",Pos:"<<m_mobility->GetPosition ().x<<","<<m_mobility->GetPosition ().y
+                   <<","<<m_mobility->GetPosition ().z<<" Start:"<<m_lc_start.x<<","
+                   <<m_lc_start.y<<";End:"<<m_lc_end.x<<","<<m_lc_end.y<<std::endl;
+          m_appointmentResult = NORMAL;
+        }
+
 
       //Broadcast forward
       if ((iif == m_SCHinterface) && (m_nodetype == CAR) && (m_appointmentResult == FORWARDER) && (!IsInDontForward (sour)))
@@ -1088,6 +1101,9 @@ RoutingProtocol::SendAckHello (const Ipv4Address& ID)
   ackhello.SetVelocity (vel.x, vel.y, vel.z);
   ackhello.SetControllArea_Start (m_lc_start);
   ackhello.SetControllArea_End (m_lc_end);
+  /*std::cout<<Ipv4toString (ackhello.ID)<<",SEND "
+           <<m_lc_start.x<<","<<m_lc_start.y<<";"
+           <<m_lc_end.x<<","<<m_lc_end.y<<std::endl;*/
 
   NS_LOG_DEBUG ( "SDN ACKHELLO_MESSAGE sent by node: " << ackhello.ID
                  << "   at " << now.GetSeconds() << "s");
