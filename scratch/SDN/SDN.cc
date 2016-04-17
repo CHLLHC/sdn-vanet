@@ -139,7 +139,7 @@ void VanetSim::LoadTraffic()
 
 void VanetSim::ConfigNode()
 {
-	m_nodes.Create(nodeNum+4);//Cars + Controller + Source + Sink
+	m_nodes.Create(nodeNum+5);//Cars + Controller + Source + Sink + LC2 +LC2
 	/*Only Apps Are Different Between Different kind of Nodes*/
 	// Name nodes
 	for (uint32_t i = 0; i < nodeNum; ++i)
@@ -151,7 +151,9 @@ void VanetSim::ConfigNode()
 	Names::Add("Controller",m_nodes.Get(nodeNum));
 	Names::Add("Source",m_nodes.Get(nodeNum+1));
 	Names::Add("Sink",m_nodes.Get(nodeNum+2));
-  Names::Add("LC2",m_nodes.Get(nodeNum+3));
+	Names::Add("LC2",m_nodes.Get(nodeNum+3));
+	Names::Add("LC3",m_nodes.Get(nodeNum+4));
+
 }
 
 void VanetSim::ConfigChannels()
@@ -244,13 +246,15 @@ void VanetSim::ConfigMobility()
 	Time temp_now = Simulator::Now();
 	std::cout<<"Now?"<<temp_now.GetSeconds ()<<std::endl;
 	Ptr<MobilityModel> Temp = m_nodes.Get(nodeNum)->GetObject<MobilityModel>();//Controller
-	Temp->SetPosition(Vector(250.0, 0.0, 0.0));
+	Temp->SetPosition(Vector(500.0, 0.0, 0.0));
 	Temp = m_nodes.Get(nodeNum+1)->GetObject<MobilityModel>();//source
 	Temp->SetPosition(Vector(5.1, 0.0, 0.0));
 	Temp = m_nodes.Get(nodeNum+2)->GetObject<MobilityModel>();//Sink
-	Temp->SetPosition(Vector(1000.0, 0.0, 0.0));
+	Temp->SetPosition(Vector(2000.0, 1000.0, 0.0));
 	Temp = m_nodes.Get(nodeNum+3)->GetObject<MobilityModel>();//LC2
-	Temp->SetPosition(Vector(750.0, 0.0, 0.0));
+	Temp->SetPosition(Vector(1000.0, 500.0, 0.0));
+  Temp = m_nodes.Get(nodeNum+4)->GetObject<MobilityModel>();//LC3
+  Temp->SetPosition(Vector(1500.0, 1000.0, 0.0));
 }
 
 void VanetSim::ConfigApp()
@@ -277,7 +281,8 @@ void VanetSim::ConfigApp()
 	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+1), sdn::OTHERS);//Source
 	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+2), sdn::OTHERS);//Sink
 
-	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+3), sdn::OTHERS);//LC2
+	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+3), sdn::LOCAL_CONTROLLER);//LC2
+	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+4), sdn::LOCAL_CONTROLLER);//LC2
 	  sdn.SetSR (range1);
 	  internet.SetRoutingHelper(sdn);
 		std::cout<<"SetRoutingHelper Done"<<std::endl;
@@ -310,9 +315,11 @@ void VanetSim::ConfigApp()
 		  }
 		Ptr<sdn::RoutingProtocol> routing =
 		            m_nodes.Get (nodeNum)->GetObject<sdn::RoutingProtocol> ();
-		routing->SetControllArea (Vector2D (0,10), Vector2D (1000,-10));
+		routing->SetControllArea (Vector2D (0,0), Vector2D (1000,-10));
 		routing = m_nodes.Get (nodeNum+3)->GetObject<sdn::RoutingProtocol> ();
-		routing->SetControllArea (Vector2D (500,10), Vector2D (1000,-10));
+		routing->SetControllArea (Vector2D (1000,0), Vector2D (1010,1000));
+		routing = m_nodes.Get (nodeNum+4)->GetObject<sdn::RoutingProtocol> ();
+		routing->SetControllArea (Vector2D (1010,1000), Vector2D (2000,990));
 	}
 
 
