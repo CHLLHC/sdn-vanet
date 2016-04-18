@@ -281,7 +281,7 @@ void VanetSim::ConfigApp()
 {
 	//===Routing
 	InternetStackHelper internet;
-	if (mod != 1)
+	if (mod == 0)
 	{
 		OlsrHelper olsr;
 		//Ipv4ListRoutingHelper list;
@@ -290,25 +290,32 @@ void VanetSim::ConfigApp()
 		std::cout<<"OLSR"<<std::endl;
 	}
 	else
-	{
-	  SdnHelper sdn;
-	  for (uint32_t i = 0; i<nodeNum; ++i)
-	    {
-	      sdn.SetNodeTypeMap (m_nodes.Get (i), sdn::CAR);
-	    }
-	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum), sdn::LOCAL_CONTROLLER);
-	  //sdn.ExcludeInterface (m_nodes.Get (nodeNum), 0);
-	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+1), sdn::OTHERS);//Source
-	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+2), sdn::OTHERS);//Sink
+	  if (mod == 1)
+      {
+        SdnHelper sdn;
+        for (uint32_t i = 0; i<nodeNum; ++i)
+          {
+            sdn.SetNodeTypeMap (m_nodes.Get (i), sdn::CAR);
+          }
+        sdn.SetNodeTypeMap (m_nodes.Get (nodeNum), sdn::LOCAL_CONTROLLER);
+        //sdn.ExcludeInterface (m_nodes.Get (nodeNum), 0);
+        sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+1), sdn::OTHERS);//Source
+        sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+2), sdn::OTHERS);//Sink
 
-	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+3), sdn::LOCAL_CONTROLLER);//LC2
-	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+4), sdn::LOCAL_CONTROLLER);//LC3
-	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+5), sdn::OTHERS);//Sink2
-	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+6), sdn::OTHERS);//Sink3
-	  sdn.SetSR (range1);
-	  internet.SetRoutingHelper(sdn);
-		std::cout<<"SetRoutingHelper Done"<<std::endl;
-	}
+        sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+3), sdn::LOCAL_CONTROLLER);//LC2
+        sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+4), sdn::LOCAL_CONTROLLER);//LC3
+        sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+5), sdn::OTHERS);//Sink2
+        sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+6), sdn::OTHERS);//Sink3
+        sdn.SetSR (range1);
+        internet.SetRoutingHelper(sdn);
+        std::cout<<"SetRoutingHelper Done"<<std::endl;
+      }
+	  else
+	    {
+	      AodvHelper aodv;
+	      internet.SetRoutingHelper(aodv);
+	      std::cout<<"AODV"<<std::endl;
+	    }
 	internet.Install (m_nodes);
 
 	std::cout<<"internet.Install Done"<<std::endl;
@@ -316,7 +323,7 @@ void VanetSim::ConfigApp()
 	//===IP ADDRESS
 	Ipv4AddressHelper ipv4S;
 	NS_LOG_INFO ("Assign IP Addresses.");
-	ipv4S.SetBase ("10.1.1.0", "255.255.255.0");//SCH
+	ipv4S.SetBase ("10.1.0.0", "255.255.0.0");//SCH
 	m_SCHInterfaces = ipv4S.Assign (m_SCHDevices);
 	std::cout<<"IPV4S Assigned"<<std::endl;
 
@@ -324,7 +331,7 @@ void VanetSim::ConfigApp()
 	if (mod ==1)
 	{
 		NS_LOG_INFO ("Assign IP-C Addresses.");
-		ipv4C.SetBase("192.168.0.0","255.255.255.0");//CCH
+		ipv4C.SetBase("192.168.0.0","255.255.0.0");//CCH
 		m_CCHInterfaces = ipv4C.Assign(m_CCHDevices);
 		std::cout<<"IPV4C Assigned"<<std::endl;
 		for (uint32_t i = 0;i<m_nodes.GetN ();++i)
@@ -349,10 +356,21 @@ void VanetSim::ConfigApp()
 	//source
 
 	//onoff
-	std::pair<Ptr<Ipv4>, uint32_t> RetValue = m_SCHInterfaces.Get (nodeNum+1);
-	Ipv4InterfaceAddress theinterface = RetValue.first->GetAddress (RetValue.second, 0);
-  Ipv4Address bcast = theinterface.GetLocal ().GetSubnetDirectedBroadcast (theinterface.GetMask ());
-	Address remote (InetSocketAddress(bcast, m_port));
+	Address remote;
+	if (mod == 1)
+	  {
+	    std::pair<Ptr<Ipv4>, uint32_t> RetValue = m_SCHInterfaces.Get (nodeNum+1);
+	    Ipv4InterfaceAddress theinterface = RetValue.first->GetAddress (RetValue.second, 0);
+	    Ipv4Address bcast = theinterface.GetLocal ().GetSubnetDirectedBroadcast (theinterface.GetMask ());
+	    remote = InetSocketAddress(bcast, m_port);
+	  }
+	else
+	  {
+	    remote = InetSocketAddress(m_SCHInterfaces.GetAddress (nodeNum+6), m_port);
+	  }
+
+
+
 	OnOffHelper Source("ns3::UdpSocketFactory",remote);//SendToSink
 	Source.SetAttribute("OffTime",StringValue ("ns3::ConstantRandomVariable[Constant=0.0]"));
 	//Source.SetAttribute("PacketSize", UintegerValue (packetSize));
@@ -481,22 +499,22 @@ void VanetSim::ConfigTracing()
 void VanetSim::ProcessOutputs()
 {
 	std::cout<<"Tx_Data_Pkts:   "<<Tx_Data_Pkts<<std::endl;
-	std::cout<<"Rx_Data_Pkts:   "<<Rx_Data_Pkts<<std::endl;
-	std::cout<<"Unique_RX_Pkts: "<<Unique_RX_Pkts<<std::endl;
+	std::cout<<"Rx_Data_Pkts3:   "<<Rx_Data_Pkts3<<std::endl;
+	std::cout<<"Unique_RX_Pkts3: "<<Unique_RX_Pkts3<<std::endl;
 
 	os<<"Result:"<<std::endl;
   os<<"Tx_Data_Pkts:   "<<Tx_Data_Pkts<<std::endl;
-  os<<"Rx_Data_Pkts:   "<<Rx_Data_Pkts<<std::endl;
-  os<<"Unique_RX_Pkts: "<<Unique_RX_Pkts<<std::endl;
+  os<<"Rx_Data_Pkts3:   "<<Rx_Data_Pkts3<<std::endl;
+  os<<"Unique_RX_Pkts3: "<<Unique_RX_Pkts3<<std::endl;
 
 
-	if (!delay_vector.empty ())
+	if (!delay_vector3.empty ())
 	  {
-      int64_t best = delay_vector[0],
-              worst = delay_vector[0];
+      int64_t best = delay_vector3[0],
+              worst = delay_vector3[0];
       double avg = 0;
-      for (std::vector<int64_t>::const_iterator cit = delay_vector.begin ();
-           cit != delay_vector.end ();++cit)
+      for (std::vector<int64_t>::const_iterator cit = delay_vector3.begin ();
+           cit != delay_vector3.end ();++cit)
         {
           if (*cit<best)
             {
@@ -510,7 +528,7 @@ void VanetSim::ProcessOutputs()
           avg += *cit;
         }
 
-      avg /= delay_vector.size();
+      avg /= delay_vector3.size();
       std::cout<<"Best delay:   "<<best<<"us"<<std::endl;
       std::cout<<"Worst delay:   "<<worst<<"us"<<std::endl;
       std::cout<<"Avg delay: "<<avg<<"us"<<std::endl;
@@ -549,22 +567,22 @@ void VanetSim::Look_at_clock()
   std::cout<<"Rx_Data_Pkts3:   "<<Rx_Data_Pkts3<<",   "<<Rx_Data_Pkts3 - old_Rx_Data_Pkts3<<std::endl;
   std::cout<<"Unique_RX_Pkts3: "<<Unique_RX_Pkts3<<",   "<<Unique_RX_Pkts3 - old_Unique_RX_Pkts3<<std::endl;
   double avg = 0;
-  for (std::vector<int64_t>::const_iterator cit = per_sec_delay_vector.begin ();
-       cit != per_sec_delay_vector.end ();++cit)
+  for (std::vector<int64_t>::const_iterator cit = per_sec_delay_vector3.begin ();
+       cit != per_sec_delay_vector3.end ();++cit)
     {
       avg += *cit;
     }
 
   if (avg >0)
     {
-      avg /= per_sec_delay_vector.size();
+      avg /= per_sec_delay_vector3.size();
     }
 
-  per_sec_delay_vector.clear ();
+  per_sec_delay_vector3.clear ();
 
-  os<<"Acc:"<<Simulator::Now().GetSeconds()<<","<<Tx_Data_Pkts<<","<<Rx_Data_Pkts<<","<<Unique_RX_Pkts<<std::endl;
+  os<<"Acc:"<<Simulator::Now().GetSeconds()<<","<<Tx_Data_Pkts<<","<<Rx_Data_Pkts3<<","<<Unique_RX_Pkts3<<std::endl;
   os<<"Inc:"<<Simulator::Now().GetSeconds()<<","<<Tx_Data_Pkts - old_Tx_Data_Pkts<<","
-    <<Rx_Data_Pkts - old_Rx_Data_Pkts<<","<<Unique_RX_Pkts - old_Unique_RX_Pkts<<","<<avg<<std::endl;
+    <<Rx_Data_Pkts3 - old_Rx_Data_Pkts3<<","<<Unique_RX_Pkts3 - old_Unique_RX_Pkts3<<","<<avg<<std::endl;
 
   old_Rx_Data_Pkts = Rx_Data_Pkts;
   old_Tx_Data_Pkts = Tx_Data_Pkts;
