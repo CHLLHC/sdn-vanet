@@ -42,6 +42,8 @@ VanetSim::VanetSim()
 	nodeNum = 0;
 	Rx_Data_Bytes = 0;
 	Rx_Data_Pkts = 0;
+	Rx_Data_Pkts2 = 0;
+	Rx_Data_Pkts3 = 0;
 	Rx_Routing_Bytes = 0;
 	RX_Routing_Pkts = 0;
 	Tx_Data_Bytes = 0;
@@ -49,11 +51,17 @@ VanetSim::VanetSim()
 	Tx_Routing_Bytes = 0;
 	TX_Routing_Pkts = 0;
 	Unique_RX_Pkts = 0;
+	Unique_RX_Pkts2 = 0;
+	Unique_RX_Pkts3 = 0;
 	m_port = 65419;
-	homepath = getenv("HOME");
-	folder="SDN";
+	homepath = ".";//getenv("HOME");
+	folder="SDNData";
 	old_Rx_Data_Pkts = 0;
 	old_Unique_RX_Pkts = 0;
+  old_Rx_Data_Pkts2 = 0;
+  old_Unique_RX_Pkts2 = 0;
+  old_Rx_Data_Pkts3 = 0;
+  old_Unique_RX_Pkts3 = 0;
 	old_Tx_Data_Pkts = 0;
 }
 
@@ -96,7 +104,7 @@ void VanetSim::ParseArguments(int argc, char *argv[])
 	cmd.AddValue ("range1", "Range for SCH", range1);
 	cmd.AddValue ("range2", "Range for CCH", range2);
 	cmd.AddValue ("verbose", "turn on all WifiNetDevice log components", verbose);
-	cmd.AddValue ("mod", "0=olsr 1=sdn(DEFAULT)", mod);
+	cmd.AddValue ("mod", "0=olsr 1=sdn(DEFAULT) 2=aodv", mod);
 	cmd.AddValue ("pmod", "0=Range(DEFAULT) 1=Other", pmod);
 	cmd.Parse (argc,argv);
 
@@ -111,10 +119,12 @@ void VanetSim::LoadTraffic()
 	if (mod==0)
 	{
 		std::cout<<"Mode: OLSR-N"<<std::endl;
+		os<<"Mode: OLSR-N"<<std::endl;
 	}
 	else
 	{
 		std::cout<<"Mode: SDN"<<std::endl;
+		os<<"Mode: SDN"<<std::endl;
 	}
 	DIR* dir = NULL;
 	//DIR* subdir=NULL;
@@ -142,7 +152,7 @@ void VanetSim::LoadTraffic()
 
 void VanetSim::ConfigNode()
 {
-	m_nodes.Create(nodeNum+5);//Cars + Controller + Source + Sink + LC2 +LC2
+	m_nodes.Create(nodeNum+7);//Cars + Controller + Source + Sink + LC2 + LC3 + Sink2 + Sink3
 	/*Only Apps Are Different Between Different kind of Nodes*/
 	// Name nodes
 	for (uint32_t i = 0; i < nodeNum; ++i)
@@ -156,7 +166,8 @@ void VanetSim::ConfigNode()
 	Names::Add("Sink",m_nodes.Get(nodeNum+2));
 	Names::Add("LC2",m_nodes.Get(nodeNum+3));
 	Names::Add("LC3",m_nodes.Get(nodeNum+4));
-
+	Names::Add("Sink2",m_nodes.Get(nodeNum+5));
+	Names::Add("Sink3",m_nodes.Get(nodeNum+6));
 }
 
 void VanetSim::ConfigChannels()
@@ -253,11 +264,17 @@ void VanetSim::ConfigMobility()
 	Temp = m_nodes.Get(nodeNum+1)->GetObject<MobilityModel>();//source
 	Temp->SetPosition(Vector(5.1, 0.0, 0.0));
 	Temp = m_nodes.Get(nodeNum+2)->GetObject<MobilityModel>();//Sink
-	Temp->SetPosition(Vector(2000.0, 1000.0, 0.0));
+	Temp->SetPosition(Vector(1000.0, 0.0, 0.0));
 	Temp = m_nodes.Get(nodeNum+3)->GetObject<MobilityModel>();//LC2
 	Temp->SetPosition(Vector(1000.0, 500.0, 0.0));
   Temp = m_nodes.Get(nodeNum+4)->GetObject<MobilityModel>();//LC3
   Temp->SetPosition(Vector(1500.0, 1000.0, 0.0));
+
+  Temp = m_nodes.Get(nodeNum+5)->GetObject<MobilityModel>();//Sink2
+  Temp->SetPosition(Vector(1000.0, 1000.0, 0.0));
+  Temp = m_nodes.Get(nodeNum+6)->GetObject<MobilityModel>();//Sink3
+  Temp->SetPosition(Vector(2000.0, 1000.0, 0.0));
+
 }
 
 void VanetSim::ConfigApp()
@@ -285,7 +302,9 @@ void VanetSim::ConfigApp()
 	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+2), sdn::OTHERS);//Sink
 
 	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+3), sdn::LOCAL_CONTROLLER);//LC2
-	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+4), sdn::LOCAL_CONTROLLER);//LC2
+	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+4), sdn::LOCAL_CONTROLLER);//LC3
+	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+5), sdn::OTHERS);//Sink2
+	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+6), sdn::OTHERS);//Sink3
 	  sdn.SetSR (range1);
 	  internet.SetRoutingHelper(sdn);
 		std::cout<<"SetRoutingHelper Done"<<std::endl;
@@ -359,6 +378,22 @@ void VanetSim::ConfigApp()
 	sink->Bind(local);
 	sink->SetRecvCallback(MakeCallback(&VanetSim::ReceiveDataPacket, this));
 
+  //sink2
+  TypeId tid2 = TypeId::LookupByName ("ns3::UdpSocketFactory");
+  Ptr<Socket> sink2 = Socket::CreateSocket (m_nodes.Get(nodeNum+5), tid2);//The Sink
+  //HearALL;
+  InetSocketAddress local2 = InetSocketAddress(Ipv4Address::GetZero (),m_port);
+  sink2->Bind(local2);
+  sink2->SetRecvCallback(MakeCallback(&VanetSim::ReceiveDataPacket2, this));
+
+  //sink3
+  TypeId tid3 = TypeId::LookupByName ("ns3::UdpSocketFactory");
+  Ptr<Socket> sink3 = Socket::CreateSocket (m_nodes.Get(nodeNum+6), tid3);//The Sink
+  //HearALL;
+  InetSocketAddress local3 = InetSocketAddress(Ipv4Address::GetZero (),m_port);
+  sink3->Bind(local3);
+  sink3->SetRecvCallback(MakeCallback(&VanetSim::ReceiveDataPacket3, this));
+
 
 	//Trace
 	//m_SCHPhy.EnablePcap ("pcap/sdn-vanet", m_SCHDevices);
@@ -378,11 +413,56 @@ void VanetSim::ReceiveDataPacket(Ptr<Socket> socket)
 	        Time now = Simulator::Now ();
 	        int64_t temp = now.GetMicroSeconds () - delay[uid].GetMicroSeconds ();
 	        delay_vector.push_back (temp);
+	        per_sec_delay_vector.push_back (temp);
 	      }
-      Rx_Data_Bytes += packet->GetSize();
+      //Rx_Data_Bytes += packet->GetSize();
       Rx_Data_Pkts++;
       //std::cout<<".";
 	  }
+}
+
+void VanetSim::ReceiveDataPacket2(Ptr<Socket> socket)
+{
+  Ptr<Packet> packet;
+  while ((packet = socket->Recv()))
+    {
+      uint64_t uid = packet->GetUid ();
+      if (dup_det2.find (uid) == dup_det2.end ())
+        {
+          Unique_RX_Pkts2++;
+          dup_det2.insert (uid);
+
+          Time now = Simulator::Now ();
+          int64_t temp = now.GetMicroSeconds () - delay[uid].GetMicroSeconds ();
+          delay_vector2.push_back (temp);
+          per_sec_delay_vector2.push_back (temp);
+        }
+      //Rx_Data_Bytes += packet->GetSize();
+      Rx_Data_Pkts2++;
+      //std::cout<<".";
+    }
+}
+
+void VanetSim::ReceiveDataPacket3(Ptr<Socket> socket)
+{
+  Ptr<Packet> packet;
+  while ((packet = socket->Recv()))
+    {
+      uint64_t uid = packet->GetUid ();
+      if (dup_det3.find (uid) == dup_det3.end ())
+        {
+          Unique_RX_Pkts3++;
+          dup_det3.insert (uid);
+
+          Time now = Simulator::Now ();
+          int64_t temp = now.GetMicroSeconds () - delay[uid].GetMicroSeconds ();
+          delay_vector3.push_back (temp);
+          per_sec_delay_vector3.push_back (temp);
+        }
+      //Rx_Data_Bytes += packet->GetSize();
+      Rx_Data_Pkts3++;
+      //std::cout<<".";
+    }
 }
 
 void VanetSim::SendDataPacket()
@@ -403,6 +483,11 @@ void VanetSim::ProcessOutputs()
 	std::cout<<"Tx_Data_Pkts:   "<<Tx_Data_Pkts<<std::endl;
 	std::cout<<"Rx_Data_Pkts:   "<<Rx_Data_Pkts<<std::endl;
 	std::cout<<"Unique_RX_Pkts: "<<Unique_RX_Pkts<<std::endl;
+
+	os<<"Result:"<<std::endl;
+  os<<"Tx_Data_Pkts:   "<<Tx_Data_Pkts<<std::endl;
+  os<<"Rx_Data_Pkts:   "<<Rx_Data_Pkts<<std::endl;
+  os<<"Unique_RX_Pkts: "<<Unique_RX_Pkts<<std::endl;
 
 
 	if (!delay_vector.empty ())
@@ -429,10 +514,14 @@ void VanetSim::ProcessOutputs()
       std::cout<<"Best delay:   "<<best<<"us"<<std::endl;
       std::cout<<"Worst delay:   "<<worst<<"us"<<std::endl;
       std::cout<<"Avg delay: "<<avg<<"us"<<std::endl;
+      os<<"Best delay:   "<<best<<"us"<<std::endl;
+      os<<"Worst delay:   "<<worst<<"us"<<std::endl;
+      os<<"Avg delay: "<<avg<<"us"<<std::endl;
 	  }
 	else
 	  {
 	    std::cout<<"NO PACKETS WERE RECEIVED."<<std::endl;
+	    os<<"NO PACKETS WERE RECEIVED."<<std::endl;
 	  }
 }
 
@@ -440,6 +529,7 @@ void VanetSim::Run()
 {
 	Simulator::Schedule(Seconds(0.0), &VanetSim::Look_at_clock, this);
 	std::cout << "Starting simulation for " << duration << " s ..."<< std::endl;
+	os << "Starting simulation for " << duration << " s ..."<< std::endl;
 	Simulator::Stop(Seconds(duration));
 	Simulator::Run();
 	Simulator::Destroy();
@@ -452,13 +542,40 @@ void VanetSim::Look_at_clock()
   std::cout<<"Tx_Data_Pkts:   "<<Tx_Data_Pkts<<",   "<<Tx_Data_Pkts - old_Tx_Data_Pkts<<std::endl;
   std::cout<<"Rx_Data_Pkts:   "<<Rx_Data_Pkts<<",   "<<Rx_Data_Pkts - old_Rx_Data_Pkts<<std::endl;
   std::cout<<"Unique_RX_Pkts: "<<Unique_RX_Pkts<<",   "<<Unique_RX_Pkts - old_Unique_RX_Pkts<<std::endl;
+
+  std::cout<<"Rx_Data_Pkts2:   "<<Rx_Data_Pkts2<<",   "<<Rx_Data_Pkts2 - old_Rx_Data_Pkts2<<std::endl;
+  std::cout<<"Unique_RX_Pkts2: "<<Unique_RX_Pkts2<<",   "<<Unique_RX_Pkts2 - old_Unique_RX_Pkts2<<std::endl;
+
+  std::cout<<"Rx_Data_Pkts3:   "<<Rx_Data_Pkts3<<",   "<<Rx_Data_Pkts3 - old_Rx_Data_Pkts3<<std::endl;
+  std::cout<<"Unique_RX_Pkts3: "<<Unique_RX_Pkts3<<",   "<<Unique_RX_Pkts3 - old_Unique_RX_Pkts3<<std::endl;
+  double avg = 0;
+  for (std::vector<int64_t>::const_iterator cit = per_sec_delay_vector.begin ();
+       cit != per_sec_delay_vector.end ();++cit)
+    {
+      avg += *cit;
+    }
+
+  if (avg >0)
+    {
+      avg /= per_sec_delay_vector.size();
+    }
+
+  per_sec_delay_vector.clear ();
+
+  os<<"Acc:"<<Simulator::Now().GetSeconds()<<","<<Tx_Data_Pkts<<","<<Rx_Data_Pkts<<","<<Unique_RX_Pkts<<std::endl;
+  os<<"Inc:"<<Simulator::Now().GetSeconds()<<","<<Tx_Data_Pkts - old_Tx_Data_Pkts<<","
+    <<Rx_Data_Pkts - old_Rx_Data_Pkts<<","<<Unique_RX_Pkts - old_Unique_RX_Pkts<<","<<avg<<std::endl;
+
   old_Rx_Data_Pkts = Rx_Data_Pkts;
   old_Tx_Data_Pkts = Tx_Data_Pkts;
   old_Unique_RX_Pkts = Unique_RX_Pkts;
 
+  old_Rx_Data_Pkts2 = Rx_Data_Pkts2;
+  old_Unique_RX_Pkts2 = Unique_RX_Pkts2;
 
+  old_Rx_Data_Pkts3 = Rx_Data_Pkts3;
+  old_Unique_RX_Pkts3 = Unique_RX_Pkts3;
 
-  os<<Simulator::Now().GetSeconds()<<","<<Tx_Data_Pkts<<","<<Rx_Data_Pkts<<","<<Unique_RX_Pkts<<std::endl;
 
 	/*Ptr<MobilityModel> Temp = m_nodes.Get (nodeNum)->GetObject<MobilityModel>();
   std::cout<<Temp->GetPosition().x<<","<<Temp->GetPosition().y<<","<<Temp->GetPosition().z<<std::endl;

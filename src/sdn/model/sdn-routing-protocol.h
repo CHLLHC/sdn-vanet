@@ -174,7 +174,7 @@ private:
   std::map<Ipv4Address, RoutingTableEntry> m_table; ///< Data structure for the routing table. (Use By Mainly by CAR Node, but LC needs it too)
 
   std::map<Ipv4Address, CarInfo> m_lc_info;///for LC
-  std::map<Ipv4Address, std::set<Ipv4Address> > m_lc_headNtail;
+  std::map<Ipv4Address, std::list<Ipv4Address> > m_lc_headNtail;
 
 
   EventGarbageCollector m_events;

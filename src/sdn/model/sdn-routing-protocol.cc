@@ -599,8 +599,19 @@ RoutingProtocol::ProcessLc2Lc (const sdn::MessageHeader &msg, const Ipv4Address 
       for (std::vector<Ipv4Address>::const_iterator cit = lc2lc.list.begin ();
            cit != lc2lc.list.end (); ++cit)
         {
-          m_lc_headNtail[lc2lc.ID].insert (*cit);
+          m_lc_headNtail[lc2lc.ID].push_back (*cit);
         }
+
+      if (m_linkEstablished)
+        {
+          for (std::list<Ipv4Address>::const_iterator cit = m_forward_chain.begin ();
+               cit != m_forward_chain.end (); ++cit)
+            {
+              CalcDontForward (*cit);
+              SendDontForward (*cit);
+            }
+        }
+
     }
 }
 
@@ -1162,8 +1173,14 @@ RoutingProtocol::SendLc2Lc ()
   sdn::MessageHeader::Lc2Lc &lc2lc = msg.GetLc2Lc ();
   lc2lc.ID = m_mainAddress;//CCH Address.
 
-  lc2lc.list.push_back (m_forward_chain.front ());
-  lc2lc.list.push_back (m_forward_chain.back ());
+  for (std::list<Ipv4Address>::const_iterator cit = m_forward_chain.begin ();
+       cit != m_forward_chain.end (); ++cit)
+    {
+      lc2lc.list.push_back (*cit);
+    }
+
+  //lc2lc.list.push_back (m_forward_chain.front ());
+  //lc2lc.list.push_back (m_forward_chain.back ());
 
   lc2lc.list_size = lc2lc.list.size ();
   QueueMessage (msg, JITTER);
@@ -1211,7 +1228,7 @@ RoutingProtocol::ComputeRoute ()
   if (m_linkEstablished)
     {
       //std::cout<<"SendAppointment"<<std::endl;
-      SendAppointment ();
+      SendLc2Lc ();
       std::cout<<"CHAIN:"<<std::endl;
       for (std::list<Ipv4Address>::const_iterator cit = m_forward_chain.begin ();
            cit != m_forward_chain.end (); ++cit)
@@ -1220,8 +1237,8 @@ RoutingProtocol::ComputeRoute ()
           CalcDontForward (*cit);
           SendDontForward (*cit);
         }
+      SendAppointment ();
       //std::cout<<"SendLC2LC"<<std::endl;
-      SendLc2Lc ();
     }
   //std::cout<<"BSReschedule"<<std::endl;
   BSReschedule ();
@@ -1313,8 +1330,12 @@ RoutingProtocol::TestResult (double result)
           double const d = (m_road_length - cit->second);
           if (d < LengthOfLastArea)
             {
+              double const v = GetProjection (m_lc_info[cit->first].Velocity);
               m_lc_info[cit->first].ID_of_minhop = Ipv4Address::GetZero ();
-              m_lc_info[cit->first].minhop = 1;
+              if ((v * result + cit->second)<m_road_length)
+                m_lc_info[cit->first].minhop = 1;
+              else
+                m_lc_info[cit->first].minhop = INFHOP;
             }
           else
             {
@@ -2110,8 +2131,8 @@ RoutingProtocol::ShouldISendHello ()
                                   m_car_lc_ack_pos.z + m_car_lc_ack_vel.z * delta_t);
   Vector3D now_pos = m_mobility->GetPosition ();
   double distance = CalculateDistance (pridict_pos, now_pos);
-  double nowspeed = GetProjection (m_mobility->GetVelocity ());
-  double oldspeed = GetProjection (m_car_lc_ack_vel);
+  //double nowspeed = GetProjection (m_mobility->GetVelocity ());
+  //double oldspeed = GetProjection (m_car_lc_ack_vel);
   bool ret = false;
 
   if ((distance > ((1-m_safety_raito)/2) * m_signal_range))//||(dabs (nowspeed-oldspeed) / oldspeed > (1-m_safety_raito)))
@@ -2123,9 +2144,16 @@ RoutingProtocol::ShouldISendHello ()
 
   if (!IsInMyArea (now_pos))
     {
+      if (m_appointmentResult == FORWARDER)
+        {
+          std::cout<<"FORWARDER--------------BUSTED!"<<std::endl;
+        }
+      else
+        {
+          std::cout<<"NORMAL BUSTED!"<<std::endl;
+        }
       m_lc_controllArea_vaild = false;
       m_appointmentResult = NORMAL;
-      std::cout<<"BUSTED!"<<std::endl;
       ret = true;
     }
 
@@ -2193,15 +2221,35 @@ RoutingProtocol::CalcDontForward (const Ipv4Address& ID)
           carinfo.list_of_dont_forward.push_back (*cit);
         }
     }
-  if ((ID != m_forward_chain.front ())&&(ID != m_forward_chain.back ()))
+  if (ID != m_forward_chain.front ())
     {
-      for (std::map<Ipv4Address, std::set<Ipv4Address> >::const_iterator cit = m_lc_headNtail.begin ();
+      for (std::map<Ipv4Address, std::list<Ipv4Address> >::const_iterator cit = m_lc_headNtail.begin ();
            cit != m_lc_headNtail.end (); ++cit)
         {
-          for (std::set<Ipv4Address>::const_iterator cit2 = cit->second.begin ();
+          for (std::list<Ipv4Address>::const_iterator cit2 = cit->second.begin ();
                cit2 != cit->second.end (); ++cit2)
             {
               carinfo.list_of_dont_forward.push_back (*cit2);
+            }
+        }
+    }
+  else
+    {
+      for (std::map<Ipv4Address, std::list<Ipv4Address> >::const_iterator cit = m_lc_headNtail.begin ();
+           cit != m_lc_headNtail.end (); ++cit)
+        {
+          bool flag = false;
+          for (std::list<Ipv4Address>::const_reverse_iterator crit2 = cit->second.rbegin ();
+               crit2 != cit->second.rend (); ++crit2)
+            {
+              if (flag)
+                {
+                  carinfo.list_of_dont_forward.push_back (*crit2);
+                }
+              else
+                {
+                  flag = true;//Skip the r-first (last) one.
+                }
             }
         }
     }
