@@ -341,8 +341,10 @@ public:
 
 private:
   void BinarySearch ();
-  void TestResult (double result);
+  bool TestResult (double result);
   void SortByDistance ();
+  double FindUpperBound ();
+  void BSReschedule ();
 
   void Do_Init_Compute ();
   void Do_Update ();
@@ -386,8 +388,8 @@ private:
   static bool Comp (const std::pair<double, Ipv4Address> &p1, const std::pair<double, Ipv4Address> &p2);
   static double CalcDist (const Vector3D &pos1, const Vector2D &pos2);
   double GetProjection (const Vector3D &vel) const;
-
-
+  std::vector<std::pair<Ipv4Address, double> > m_bs_sort;
+  double m_lowerbound;
 };
 
 

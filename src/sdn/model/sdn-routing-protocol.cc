@@ -47,8 +47,6 @@
 #include "ns3/trace-source-accessor.h"
 #include "ns3/ipv4-header.h"
 
-#include "stdlib.h" //ABS
-
 #include <ostream>
 
 /********** Useful macros **********/
@@ -89,6 +87,13 @@ namespace ns3 {
 namespace sdn {
 
 NS_LOG_COMPONENT_DEFINE ("SdnRoutingProtocol");
+
+//Double ABS
+double
+dabs (double x)
+{
+  return x > 0 ? x : -x;
+}
 
 std::string
 Ipv4toString (const Ipv4Address& address)
@@ -137,7 +142,8 @@ RoutingProtocol::RoutingProtocol ()
     m_safety_raito (0.9),
     m_lc_controllArea_vaild (false),
     m_norespond_hm (0),
-    m_car_lc_ack_vaild (false)
+    m_car_lc_ack_vaild (false),
+    m_lowerbound (0)
 {
   m_uniformRandomVariable = CreateObject<UniformRandomVariable> ();
 }
@@ -1201,10 +1207,223 @@ RoutingProtocol::ComputeRoute ()
       //std::cout<<"SendLC2LC"<<std::endl;
       SendLc2Lc ();
     }
-  //std::cout<<"Reschedule"<<std::endl;
-  Reschedule ();
+  //std::cout<<"BSReschedule"<<std::endl;
+  BSReschedule ();
   std::cout<<"CR DONE"<<std::endl;
 }//RoutingProtocol::ComputeRoute
+
+void
+RoutingProtocol::BinarySearch ()
+{
+  SortByDistance ();
+  double LowerBound = 0;
+  double UpperBound = FindUpperBound ();
+  uint32_t BS_count = 0;
+  while (UpperBound - LowerBound > 0.5)
+    {
+      double mid = (UpperBound + LowerBound)/2;
+      ++BS_count;
+      if (TestResult (mid))
+        {
+          LowerBound = mid;
+        }
+      else
+        {
+          UpperBound = mid;
+        }
+    }
+
+  ++BS_count;
+  std::cout<<"BS_count:"<<BS_count<<",LowerBound:"<<LowerBound<<std::endl;
+
+  //SetForwardChain
+  if (TestResult (LowerBound))//Double Check and Set m_linkEstablished/m_lc_info
+    {
+      if (LowerBound > 1)
+        {
+          m_linkEstablished = true;
+          //build chain
+          uint32_t pos = 0;
+          while (pos<m_bs_sort.size ())
+            {
+              if (m_lc_info[m_bs_sort[pos].first].minhop != INFHOP)
+                {
+                  break;
+                }
+              ++pos;
+            }
+          m_theFirstCar = m_bs_sort[pos].first;
+          Ipv4Address The_Car = m_theFirstCar,
+                      ZERO = Ipv4Address::GetZero ();
+          m_forward_chain.clear ();
+          ResetAppointmentResult ();
+          while (The_Car != ZERO)
+            {
+              m_forward_chain.push_back (The_Car);
+              m_lc_info[The_Car].appointmentResult = FORWARDER;
+              The_Car = m_lc_info[The_Car].ID_of_minhop;
+            }
+
+          m_lowerbound = LowerBound;
+        }
+      else
+        m_linkEstablished = false;
+    }
+  else
+    {
+      m_linkEstablished = false;
+    }
+}
+
+bool
+RoutingProtocol::TestResult (double result)
+{
+  //INIT
+  bool flag = true;
+  double const LengthOfLastArea = 0.5 * m_signal_range;
+  for (std::vector<std::pair<Ipv4Address, double> >::const_reverse_iterator crit = m_bs_sort.rbegin ();
+       crit != m_bs_sort.rend (); ++crit)
+    {
+      if (flag)
+        {
+          double const d = (m_road_length - crit->second);
+          if (d < LengthOfLastArea)
+            {
+              m_lc_info[crit->first].ID_of_minhop = Ipv4Address::GetZero ();
+              m_lc_info[crit->first].minhop = 1;
+            }
+          else
+            {
+              flag = false;
+              m_lc_info[crit->first].ID_of_minhop = Ipv4Address::GetZero ();
+              m_lc_info[crit->first].minhop = INFHOP;
+            }
+        }
+      else
+        {
+          m_lc_info[crit->first].ID_of_minhop = Ipv4Address::GetZero ();
+          m_lc_info[crit->first].minhop = INFHOP;
+        }
+    }
+
+
+  //DP
+  for (int i = m_bs_sort.size () -1; i>=0 ;--i)
+    {
+      if ((m_road_length - m_bs_sort[i].second) >= LengthOfLastArea)
+        {
+          int thesize = m_bs_sort.size();
+          for (int j = i+1; j < thesize; ++j)
+            {
+              if (m_bs_sort[j].second - m_bs_sort[i].second > m_road_length * m_safety_raito)
+                {
+                  break;
+                }
+              double const vi = GetProjection (m_lc_info[m_bs_sort[i].first].Velocity);
+              double const vj = GetProjection (m_lc_info[m_bs_sort[j].first].Velocity);
+              double const ppi = (vi * result + m_bs_sort[i].second);
+              bool const b4ileft = ppi < m_road_length;
+              double const ppj = (vj * result + m_bs_sort[j].second);
+              bool const b4jleft = ppj < m_road_length;
+              bool const b4ijlost = dabs (ppi - ppj) < m_signal_range * m_safety_raito;
+              if (b4ileft && b4jleft && b4ijlost)
+                {
+                  if (m_lc_info[m_bs_sort[i].first].minhop >  m_lc_info[m_bs_sort[j].first].minhop + 1)
+                    {
+                      m_lc_info[m_bs_sort[i].first].minhop = m_lc_info[m_bs_sort[j].first].minhop + 1;
+                      m_lc_info[m_bs_sort[i].first].ID_of_minhop = m_bs_sort[j].first;
+                    }
+                }
+            }
+        }
+    }
+
+  //Check the first Area
+  bool ret = false;
+  for (uint32_t i = 0; i<m_bs_sort.size();++i)
+    {
+      if (m_bs_sort[i].second < 0.5*m_signal_range)
+        {
+          if (m_lc_info[m_bs_sort[i].first].minhop != INFHOP)
+            {
+              ret = true;
+              break;
+            }
+        }
+      else
+        {
+          break;
+        }
+    }
+  return ret;
+}
+
+
+double
+RoutingProtocol::FindUpperBound ()
+{
+  double ret = 0;
+  double const LengthOfFirstArea = 0.5 * m_signal_range;
+  for (std::list<Ipv4Address>::const_iterator cit = m_list4sort.begin ();
+       cit != m_list4sort.end (); ++cit)
+    {
+      double const v = GetProjection (m_lc_info[*cit].Velocity);
+      double const d = CalcDist (m_lc_info[*cit].GetPos (), m_lc_start);
+      if (d>LengthOfFirstArea)
+        break;
+      double t2l = (LengthOfFirstArea - d) / v;
+      if (t2l > ret)
+        ret = t2l;
+    }
+  return ret;
+}
+
+void
+RoutingProtocol::SortByDistance ()
+{
+  m_bs_sort.clear ();
+
+  std::list<std::pair<double, Ipv4Address> > templist;
+
+  for (std::map<Ipv4Address, CarInfo>::const_iterator cit = m_lc_info.begin ();
+      cit != m_lc_info.end (); ++cit)
+    {
+
+      Vector3D temp3D = cit->second.GetPos ();
+      double distance = CalculateDistance (Vector2D(temp3D.x, temp3D.y), m_lc_start);
+
+      templist.push_back (std::pair<double, Ipv4Address>(distance, cit->first));
+    }
+
+  templist.sort (RoutingProtocol::Comp);
+
+  for (std::list<std::pair<double, Ipv4Address> >::const_iterator cit = templist.begin ();
+       cit != templist.end (); ++cit)
+    {
+      //std::cout<<cit->second.Get () % 256<<":"<<cit->first<<std::endl;
+      m_bs_sort.push_back (std::pair<Ipv4Address, double>(cit->second, cit->first));
+    }
+}
+
+void
+RoutingProtocol::BSReschedule ()
+{
+  if (!m_linkEstablished)
+    {
+      if (m_apTimer.IsRunning ())
+        {
+          m_apTimer.Remove ();
+        }
+      m_apTimer.Schedule (m_minAPInterval);
+      //std::cout<<"Reschedule:"<<m_minAPInterval.GetSeconds ()<<"s."<<std::endl;
+    }
+  else
+    {
+      m_apTimer.Schedule (Seconds (m_lowerbound));
+    }
+}
+
+
 
 void
 RoutingProtocol::Do_Init_Compute ()
@@ -1637,7 +1856,7 @@ RoutingProtocol::GetShortHop(const Ipv4Address& IDa, const Ipv4Address& IDb)
       temp = (m_road_length - da) / va;
     }
   double const t2bl = temp;
-  if ((db - da < safe_range) && (abs((db + vb*t2bl)-(da + va*t2bl)) < safe_range))
+  if ((db - da < safe_range) && (dabs((db + vb*t2bl)-(da + va*t2bl)) < safe_range))
     {
       ShortHop sh;
       sh.nextID = IDb;
@@ -1676,8 +1895,8 @@ RoutingProtocol::GetShortHop(const Ipv4Address& IDa, const Ipv4Address& IDb)
           double const t2blmt = t2bl - sh.t;
           if ((tda<tdc)&&(tdc<tdb)&&(tdc-tda<safe_range)&&(tdb-tdc<safe_range))
             {
-              if ((abs((tdb + vb*t2blmt)-(tdc + vc*t2blmt)) < safe_range)&&
-                  (abs((tdc + vc*t2blmt)-(tda + va*t2blmt)) < safe_range))
+              if ((dabs((tdb + vb*t2blmt)-(tdc + vc*t2blmt)) < safe_range)&&
+                  (dabs((tdc + vc*t2blmt)-(tda + va*t2blmt)) < safe_range))
                 {
                   sh.IDa = IDa;
                   sh.IDb = IDb;
