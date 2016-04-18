@@ -250,7 +250,7 @@ void VanetSim::ConfigMobility()
 	Temp = m_nodes.Get(nodeNum+1)->GetObject<MobilityModel>();//source
 	Temp->SetPosition(Vector(5.1, 0.0, 0.0));
 	Temp = m_nodes.Get(nodeNum+2)->GetObject<MobilityModel>();//Sink
-	Temp->SetPosition(Vector(2000.0, 1000.0, 0.0));
+	Temp->SetPosition(Vector(1000.0, 0.0, 0.0));
 	Temp = m_nodes.Get(nodeNum+3)->GetObject<MobilityModel>();//LC2
 	Temp->SetPosition(Vector(1000.0, 500.0, 0.0));
   Temp = m_nodes.Get(nodeNum+4)->GetObject<MobilityModel>();//LC3
@@ -281,8 +281,8 @@ void VanetSim::ConfigApp()
 	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+1), sdn::OTHERS);//Source
 	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+2), sdn::OTHERS);//Sink
 
-	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+3), sdn::LOCAL_CONTROLLER);//LC2
-	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+4), sdn::LOCAL_CONTROLLER);//LC2
+	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+3), sdn::OTHERS);//LC2
+	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+4), sdn::OTHERS);//LC2
 	  sdn.SetSR (range1);
 	  internet.SetRoutingHelper(sdn);
 		std::cout<<"SetRoutingHelper Done"<<std::endl;

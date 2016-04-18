@@ -1215,9 +1215,10 @@ RoutingProtocol::ComputeRoute ()
 void
 RoutingProtocol::BinarySearch ()
 {
-  SortByDistance ();
+  SortByDistance ();//LC_END->LC_START
   double LowerBound = 0;
   double UpperBound = FindUpperBound ();
+  std::cout<<"Upper:"<<UpperBound<<std::endl;
   uint32_t BS_count = 0;
   while (UpperBound - LowerBound > 0.5)
     {
@@ -1243,14 +1244,14 @@ RoutingProtocol::BinarySearch ()
         {
           m_linkEstablished = true;
           //build chain
-          uint32_t pos = 0;
-          while (pos<m_bs_sort.size ())
+          int pos = m_bs_sort.size () - 1;
+          while (pos>=0)
             {
               if (m_lc_info[m_bs_sort[pos].first].minhop != INFHOP)
                 {
                   break;
                 }
-              ++pos;
+              --pos;
             }
           m_theFirstCar = m_bs_sort[pos].first;
           Ipv4Address The_Car = m_theFirstCar,
@@ -1281,39 +1282,40 @@ RoutingProtocol::TestResult (double result)
   //INIT
   bool flag = true;
   double const LengthOfLastArea = 0.5 * m_signal_range;
-  for (std::vector<std::pair<Ipv4Address, double> >::const_reverse_iterator crit = m_bs_sort.rbegin ();
-       crit != m_bs_sort.rend (); ++crit)
+  for (std::vector<std::pair<Ipv4Address, double> >::const_iterator cit = m_bs_sort.begin ();
+       cit != m_bs_sort.end (); ++cit)
     {
       if (flag)
         {
-          double const d = (m_road_length - crit->second);
+          double const d = (m_road_length - cit->second);
           if (d < LengthOfLastArea)
             {
-              m_lc_info[crit->first].ID_of_minhop = Ipv4Address::GetZero ();
-              m_lc_info[crit->first].minhop = 1;
+              m_lc_info[cit->first].ID_of_minhop = Ipv4Address::GetZero ();
+              m_lc_info[cit->first].minhop = 1;
             }
           else
             {
               flag = false;
-              m_lc_info[crit->first].ID_of_minhop = Ipv4Address::GetZero ();
-              m_lc_info[crit->first].minhop = INFHOP;
+              m_lc_info[cit->first].ID_of_minhop = Ipv4Address::GetZero ();
+              m_lc_info[cit->first].minhop = INFHOP;
             }
         }
       else
         {
-          m_lc_info[crit->first].ID_of_minhop = Ipv4Address::GetZero ();
-          m_lc_info[crit->first].minhop = INFHOP;
+          m_lc_info[cit->first].ID_of_minhop = Ipv4Address::GetZero ();
+          m_lc_info[cit->first].minhop = INFHOP;
         }
     }
 
 
   //DP
-  for (int i = m_bs_sort.size () -1; i>=0 ;--i)
+  for (uint32_t i = 0; i<m_bs_sort.size () ;++i)
     {
+      std::cout<<Ipv4toString (m_bs_sort[i].first)<<","<<m_bs_sort[i].second<<std::endl;
+
       if ((m_road_length - m_bs_sort[i].second) >= LengthOfLastArea)
         {
-          int thesize = m_bs_sort.size();
-          for (int j = i+1; j < thesize; ++j)
+          for (int j = i - 1; j >= 0; --j)
             {
               if (m_bs_sort[j].second - m_bs_sort[i].second > m_road_length * m_safety_raito)
                 {
@@ -1340,7 +1342,7 @@ RoutingProtocol::TestResult (double result)
 
   //Check the first Area
   bool ret = false;
-  for (uint32_t i = 0; i<m_bs_sort.size();++i)
+  for (int i = m_bs_sort.size()-1; i>=0; --i)
     {
       if (m_bs_sort[i].second < 0.5*m_signal_range)
         {
@@ -1364,11 +1366,11 @@ RoutingProtocol::FindUpperBound ()
 {
   double ret = 0;
   double const LengthOfFirstArea = 0.5 * m_signal_range;
-  for (std::list<Ipv4Address>::const_iterator cit = m_list4sort.begin ();
-       cit != m_list4sort.end (); ++cit)
+  for (std::vector<std::pair<Ipv4Address, double> > ::const_reverse_iterator crit = m_bs_sort.rbegin ();
+       crit != m_bs_sort.rend (); ++crit)
     {
-      double const v = GetProjection (m_lc_info[*cit].Velocity);
-      double const d = CalcDist (m_lc_info[*cit].GetPos (), m_lc_start);
+      double const v = GetProjection (m_lc_info[crit->first].Velocity);
+      double const d = crit->second;
       if (d>LengthOfFirstArea)
         break;
       double t2l = (LengthOfFirstArea - d) / v;
