@@ -1171,7 +1171,8 @@ RoutingProtocol::ComputeRoute ()
   //std::cout<<"RemoveTimeOut"<<std::endl;
   RemoveTimeOut (); //Remove Stale Tuple
 
-  if (1)//(!m_linkEstablished)
+  /*
+  if (!m_linkEstablished)
     {
       //std::cout<<"Do_Init_Compute"<<std::endl;
       Do_Init_Compute ();
@@ -1181,6 +1182,9 @@ RoutingProtocol::ComputeRoute ()
       //std::cout<<"Do_Update"<<std::endl;
       Do_Update ();
     }
+  */
+
+  BinarySearch ();
 
   if (m_linkEstablished)
     {

@@ -340,6 +340,10 @@ public:
   void SetSignalRange (double signal_range);
 
 private:
+  void BinarySearch ();
+  void TestResult (double result);
+  void SortByDistance ();
+
   void Do_Init_Compute ();
   void Do_Update ();
   void Reschedule ();
