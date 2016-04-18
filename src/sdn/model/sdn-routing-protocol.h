@@ -382,7 +382,7 @@ private:
   Time m_car_lc_ack_time;
   bool m_car_lc_ack_vaild;
 
-  bool ShouldISendHello() const;
+  bool ShouldISendHello();
 
   bool IsInMyArea (Vector3D pos) const;
   static bool Comp (const std::pair<double, Ipv4Address> &p1, const std::pair<double, Ipv4Address> &p2);

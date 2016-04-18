@@ -52,6 +52,9 @@ VanetSim::VanetSim()
 	m_port = 65419;
 	homepath = getenv("HOME");
 	folder="SDN";
+	old_Rx_Data_Pkts = 0;
+	old_Unique_RX_Pkts = 0;
+	old_Tx_Data_Pkts = 0;
 }
 
 VanetSim::~VanetSim()
@@ -250,7 +253,7 @@ void VanetSim::ConfigMobility()
 	Temp = m_nodes.Get(nodeNum+1)->GetObject<MobilityModel>();//source
 	Temp->SetPosition(Vector(5.1, 0.0, 0.0));
 	Temp = m_nodes.Get(nodeNum+2)->GetObject<MobilityModel>();//Sink
-	Temp->SetPosition(Vector(1000.0, 0.0, 0.0));
+	Temp->SetPosition(Vector(2000.0, 1000.0, 0.0));
 	Temp = m_nodes.Get(nodeNum+3)->GetObject<MobilityModel>();//LC2
 	Temp->SetPosition(Vector(1000.0, 500.0, 0.0));
   Temp = m_nodes.Get(nodeNum+4)->GetObject<MobilityModel>();//LC3
@@ -281,8 +284,8 @@ void VanetSim::ConfigApp()
 	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+1), sdn::OTHERS);//Source
 	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+2), sdn::OTHERS);//Sink
 
-	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+3), sdn::OTHERS);//LC2
-	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+4), sdn::OTHERS);//LC2
+	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+3), sdn::LOCAL_CONTROLLER);//LC2
+	  sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+4), sdn::LOCAL_CONTROLLER);//LC2
 	  sdn.SetSR (range1);
 	  internet.SetRoutingHelper(sdn);
 		std::cout<<"SetRoutingHelper Done"<<std::endl;
@@ -446,9 +449,14 @@ void VanetSim::Run()
 void VanetSim::Look_at_clock()
 {
 	std::cout<<"Now:"<<Simulator::Now().GetSeconds()<<std::endl;
-  std::cout<<"Tx_Data_Pkts:   "<<Tx_Data_Pkts<<std::endl;
-  std::cout<<"Rx_Data_Pkts:   "<<Rx_Data_Pkts<<std::endl;
-  std::cout<<"Unique_RX_Pkts: "<<Unique_RX_Pkts<<std::endl;
+  std::cout<<"Tx_Data_Pkts:   "<<Tx_Data_Pkts<<",   "<<Tx_Data_Pkts - old_Tx_Data_Pkts<<std::endl;
+  std::cout<<"Rx_Data_Pkts:   "<<Rx_Data_Pkts<<",   "<<Rx_Data_Pkts - old_Rx_Data_Pkts<<std::endl;
+  std::cout<<"Unique_RX_Pkts: "<<Unique_RX_Pkts<<",   "<<Unique_RX_Pkts - old_Unique_RX_Pkts<<std::endl;
+  old_Rx_Data_Pkts = Rx_Data_Pkts;
+  old_Tx_Data_Pkts = Tx_Data_Pkts;
+  old_Unique_RX_Pkts = Unique_RX_Pkts;
+
+
 
   os<<Simulator::Now().GetSeconds()<<","<<Tx_Data_Pkts<<","<<Rx_Data_Pkts<<","<<Unique_RX_Pkts<<std::endl;
 

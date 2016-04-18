@@ -85,7 +85,8 @@ private:
 	uint32_t RX_Routing_Pkts, TX_Routing_Pkts;
 	uint32_t Rx_Data_Bytes, Tx_Data_Bytes;
 	uint32_t Rx_Data_Pkts, Tx_Data_Pkts;
-	uint32_t Unique_RX_Pkts;
+  uint32_t old_Rx_Data_Pkts, old_Tx_Data_Pkts;
+	uint32_t Unique_RX_Pkts, old_Unique_RX_Pkts;
 	uint32_t m_port;
 	ApplicationContainer m_source, m_sink, m_cars, m_controller;
 	Ptr<ns3::vanetmobility::VANETmobility> VMo;

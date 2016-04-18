@@ -442,6 +442,11 @@ RoutingProtocol::ProcessHM (const sdn::MessageHeader &msg)
             {
               it->second.Velocity.z = 10;
             }
+          if (it->second.appointmentResult == FORWARDER)
+            {
+              std::cout<<"miscalculation on FORWARDER Car:"<<Ipv4toString (ID)<<std::endl;
+              ComputeRoute ();
+            }
         }
       else
         {
@@ -504,12 +509,12 @@ RoutingProtocol::ProcessAppointment (const sdn::MessageHeader &msg)
       switch (appointment.ATField)
       {
         case NORMAL:
-          std::cout<<"CAR:"<<Ipv4toString (m_mainAddress)<<"  ProcessAppointment";
-          std::cout<<" \"NORMAL\""<<std::endl;
+          //std::cout<<"CAR:"<<Ipv4toString (m_mainAddress)<<"  ProcessAppointment";
+          //std::cout<<" \"NORMAL\""<<std::endl;
           break;
         case FORWARDER:
-          std::cout<<"CAR:"<<Ipv4toString (m_mainAddress)<<"  ProcessAppointment";
-          std::cout<<" \"FORWARDER\""<<std::endl;
+          //std::cout<<"CAR:"<<Ipv4toString (m_mainAddress)<<"  ProcessAppointment";
+          //std::cout<<" \"FORWARDER\""<<std::endl;
           break;
         default:
           std::cout<<"RoutingProtocol::ProcessAppointment->ERROR TYPE"<<std::endl;
@@ -529,8 +534,19 @@ RoutingProtocol::ProcessAckHello (const sdn::MessageHeader &msg)
       m_car_lc_ack_vel = ackhello.GetVelocity ();
       m_car_lc_ack_time = Simulator::Now ();
       m_car_lc_ack_vaild = true;
-      m_lc_start = ackhello.GetControllArea_Start ();
-      m_lc_end = ackhello.GetControllArea_End ();
+      Vector2D new_start = ackhello.GetControllArea_Start ();
+      Vector2D new_end = ackhello.GetControllArea_End ();
+      if (m_lc_controllArea_vaild)
+        {
+          if ((m_lc_start.x != new_start.x)||(m_lc_start.y != new_start.y)||
+              (m_lc_end.x != new_end.x)||(m_lc_end.y != new_end.y)) //Come to an new area~
+            {
+              std::cout<<"NEWAREA"<<Ipv4toString (ackhello.ID)<<std::endl;
+              m_appointmentResult = NORMAL;
+            }
+        }
+      m_lc_start = new_start;
+      m_lc_end = new_end;
       /*std::cout<<Ipv4toString (ackhello.ID)<<",ACK "
                <<m_lc_start.x<<","<<m_lc_start.y<<";"
                <<m_lc_end.x<<","<<m_lc_end.y<<std::endl;*/
@@ -1244,18 +1260,25 @@ RoutingProtocol::BinarySearch ()
         {
           m_linkEstablished = true;
           //build chain
+          double const LengthOfFirstArea = 0.5 * m_signal_range;
+          Ipv4Address The_Car,
+                      ZERO = Ipv4Address::GetZero ();
+          double minhop = INFHOP;
           int pos = m_bs_sort.size () - 1;
           while (pos>=0)
             {
-              if (m_lc_info[m_bs_sort[pos].first].minhop != INFHOP)
+              if (m_bs_sort[pos].second > LengthOfFirstArea)
                 {
                   break;
                 }
+              if (m_lc_info[m_bs_sort[pos].first].minhop < minhop)
+                {
+                  minhop = m_lc_info[m_bs_sort[pos].first].minhop;
+                  The_Car = m_bs_sort[pos].first;
+                }
               --pos;
             }
-          m_theFirstCar = m_bs_sort[pos].first;
-          Ipv4Address The_Car = m_theFirstCar,
-                      ZERO = Ipv4Address::GetZero ();
+          m_theFirstCar = The_Car;
           m_forward_chain.clear ();
           ResetAppointmentResult ();
           while (The_Car != ZERO)
@@ -1311,8 +1334,7 @@ RoutingProtocol::TestResult (double result)
   //DP
   for (uint32_t i = 0; i<m_bs_sort.size () ;++i)
     {
-      std::cout<<Ipv4toString (m_bs_sort[i].first)<<","<<m_bs_sort[i].second<<std::endl;
-
+      //std::cout<<Ipv4toString (m_bs_sort[i].first)<<","<<m_bs_sort[i].second<<std::endl;
       if ((m_road_length - m_bs_sort[i].second) >= LengthOfLastArea)
         {
           for (int j = i - 1; j >= 0; --j)
@@ -1421,6 +1443,10 @@ RoutingProtocol::BSReschedule ()
     }
   else
     {
+      if (m_apTimer.IsRunning ())
+        {
+          m_apTimer.Remove ();
+        }
       m_apTimer.Schedule (Seconds (m_lowerbound));
     }
 }
@@ -2066,7 +2092,7 @@ RoutingProtocol::SetControllArea (Vector2D start, Vector2D end)
 }
 
 bool
-RoutingProtocol::ShouldISendHello () const
+RoutingProtocol::ShouldISendHello ()
 {
   //return true;
 
@@ -2084,15 +2110,26 @@ RoutingProtocol::ShouldISendHello () const
                                   m_car_lc_ack_pos.z + m_car_lc_ack_vel.z * delta_t);
   Vector3D now_pos = m_mobility->GetPosition ();
   double distance = CalculateDistance (pridict_pos, now_pos);
+  double nowspeed = GetProjection (m_mobility->GetVelocity ());
+  double oldspeed = GetProjection (m_car_lc_ack_vel);
+  bool ret = false;
 
-  if (distance > ((1-m_safety_raito)/2) * m_signal_range)
+  if ((distance > ((1-m_safety_raito)/2) * m_signal_range))//||(dabs (nowspeed-oldspeed) / oldspeed > (1-m_safety_raito)))
     {
+      m_car_lc_ack_vaild = false;
       //std::cout<<"DIS,YES!"<<distance<<" "<<std::endl;
-      return true;
+      ret = true;
     }
 
-  //std::cout<<"return FALSE"<<std::endl;
-  return false;
+  if (!IsInMyArea (now_pos))
+    {
+      m_lc_controllArea_vaild = false;
+      m_appointmentResult = NORMAL;
+      std::cout<<"BUSTED!"<<std::endl;
+      ret = true;
+    }
+
+  return ret;
 }
 
 bool
