@@ -104,7 +104,7 @@ void VanetSim::ParseArguments(int argc, char *argv[])
 	cmd.AddValue ("range1", "Range for SCH", range1);
 	cmd.AddValue ("range2", "Range for CCH", range2);
 	cmd.AddValue ("verbose", "turn on all WifiNetDevice log components", verbose);
-	cmd.AddValue ("mod", "0=olsr 1=sdn(DEFAULT) 2=aodv", mod);
+	cmd.AddValue ("mod", "0=olsr 1=sdn(DEFAULT) 2=aodv 3=dsdv 4=dsr", mod);
 	cmd.AddValue ("pmod", "0=Range(DEFAULT) 1=Other", pmod);
 	cmd.Parse (argc,argv);
 
@@ -281,18 +281,39 @@ void VanetSim::ConfigApp()
 {
 	//===Routing
 	InternetStackHelper internet;
-	if (mod == 0)
-	{
-		OlsrHelper olsr;
-		//Ipv4ListRoutingHelper list;
-		//list.Add(olsr,100);
-		internet.SetRoutingHelper(olsr);
-		std::cout<<"OLSR"<<std::endl;
-	}
-	else
-	  if (mod == 1)
-      {
-        SdnHelper sdn;
+	OlsrHelper olsr;
+	SdnHelper sdn;
+	AodvHelper aodv;
+	DsdvHelper dsdv;
+	DsrHelper dsr;
+	DsrMainHelper dsrMain;
+	switch (mod)
+	  {
+      case 0:
+        internet.SetRoutingHelper(olsr);
+        internet.Install (m_nodes);
+        std::cout<<"OLSR"<<std::endl;
+        os<<"OLSR"<<std::endl;
+        break;
+      case 2:
+        internet.SetRoutingHelper(aodv);
+        internet.Install (m_nodes);
+        std::cout<<"AODV"<<std::endl;
+        os<<"AODV"<<std::endl;
+        break;
+      case 3:
+        internet.SetRoutingHelper(dsdv);
+        internet.Install (m_nodes);
+        std::cout<<"DSDV"<<std::endl;
+        os<<"DSDV"<<std::endl;
+        break;
+      case 4:
+        internet.Install (m_nodes);
+        dsrMain.Install (dsr, m_nodes);
+        std::cout<<"DSR"<<std::endl;
+        os<<"DSR"<<std::endl;
+        break;
+      default:
         for (uint32_t i = 0; i<nodeNum; ++i)
           {
             sdn.SetNodeTypeMap (m_nodes.Get (i), sdn::CAR);
@@ -308,15 +329,10 @@ void VanetSim::ConfigApp()
         sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+6), sdn::OTHERS);//Sink3
         sdn.SetSR (range1);
         internet.SetRoutingHelper(sdn);
+        internet.Install (m_nodes);
         std::cout<<"SetRoutingHelper Done"<<std::endl;
-      }
-	  else
-	    {
-	      AodvHelper aodv;
-	      internet.SetRoutingHelper(aodv);
-	      std::cout<<"AODV"<<std::endl;
-	    }
-	internet.Install (m_nodes);
+	  }
+
 
 	std::cout<<"internet.Install Done"<<std::endl;
 

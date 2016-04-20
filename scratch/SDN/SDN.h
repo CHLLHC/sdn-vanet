@@ -22,6 +22,8 @@
 #include "ns3/wave-mac-helper.h"
 #include "ns3/olsr-helper.h"
 #include "ns3/aodv-helper.h"
+#include "ns3/dsdv-module.h"
+#include "ns3/dsr-module.h"
 
 //FINALLY!
 #include "ns3/sdn-helper.h"
