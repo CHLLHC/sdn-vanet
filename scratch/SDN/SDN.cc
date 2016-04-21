@@ -138,7 +138,7 @@ void VanetSim::LoadTraffic()
 	std::string sumo_route = temp + "/input.rou.xml";
 	std::string sumo_fcd = temp + "/input.fcd.xml";
 
-	std::string output = temp + "/result.txt";
+	std::string output = temp + "/result_w_delay.txt";
 
 	os.open(output.data(),std::ios::out);
 
@@ -491,6 +491,7 @@ void VanetSim::ReceiveDataPacket3(Ptr<Socket> socket)
           Time now = Simulator::Now ();
           int64_t temp = now.GetMicroSeconds () - delay[uid].GetMicroSeconds ();
           delay_vector3.push_back (temp);
+          os<<"Pdelay"<<temp<<std::endl;
           per_sec_delay_vector3.push_back (temp);
         }
       //Rx_Data_Bytes += packet->GetSize();
