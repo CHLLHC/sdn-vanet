@@ -41,7 +41,7 @@ class VanetSim
 public:
 	VanetSim();
 	~VanetSim();
-	void Simulate(int argc, char *argv[], std::string todo);
+	void Simulate(int argc, char *argv[]);
 protected:
 	void SetDefault();
 	void ParseArguments(int argc, char *argv[]);

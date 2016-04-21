@@ -70,9 +70,8 @@ VanetSim::~VanetSim()
 	dos.close();
 }
 
-void VanetSim::Simulate(int argc, char *argv[], std::string todo)
+void VanetSim::Simulate(int argc, char *argv[])
 {
-  m_todo = todo;
 	SetDefault();
 	ParseArguments(argc, argv);
 	LoadTraffic();
@@ -105,7 +104,7 @@ void VanetSim::ParseArguments(int argc, char *argv[])
 	cmd.AddValue ("range1", "Range for SCH", range1);
 	cmd.AddValue ("range2", "Range for CCH", range2);
 	cmd.AddValue ("verbose", "turn on all WifiNetDevice log components", verbose);
-	//cmd.AddValue ("mod", "0=olsr 1=sdn(DEFAULT) 2=aodv 3=dsdv 4=dsr", mod);
+	cmd.AddValue ("mod", "0=olsr 1=sdn(DEFAULT) 2=aodv 3=dsdv 4=dsr", mod);
 	cmd.AddValue ("ds", "DataSet", m_ds);
 	cmd.Parse (argc,argv);
 
@@ -113,35 +112,27 @@ void VanetSim::ParseArguments(int argc, char *argv[])
 	Config::SetDefault ("ns3::WifiRemoteStationManager::NonUnicastMode",
 	                      StringValue (phyMode));
 
-	mod = 1;
-	if (m_todo == "AODV")
-	  mod = 2;
-  if (m_todo == "DSDV")
-    mod = 3;
-  if (m_todo == "DSR")
-    mod = 4;
-  if (m_todo == "OLSR")
-    mod = 1;
 
-/*
-	switch (m_todo)
+	switch (mod)
 	{
-	  case "AODV":
-      mod = 2;
+	  case 2:
+      m_todo = "AODV";
       break;
-	  case "DSDV":
-      mod = 3;
+    case 3:
+      m_todo = "DSDV";
       break;
-	  case "DSR":
-      mod = 4;
+    case 4:
+      m_todo = "DSR";
       break;
-	  case "OLSR":
-      mod = 0;
+    case 0:
+      m_todo = "OLSR";
       break;
-	  default:
-	    mod = 1;
+    default:
+      m_todo = "SDN";
+      mod = 1;
+      break;
 	}
-*/
+
 }
 
 void VanetSim::LoadTraffic()
@@ -170,9 +161,9 @@ void VanetSim::LoadTraffic()
 
 	nodeNum = VMo->GetNodeSize();
 
-  std::cout<<"Mode:"<<m_todo<<"DataSet:"<<m_ds<<std::endl;
-  os<<"Mode:"<<m_todo<<"DataSet:"<<m_ds<<std::endl;
-  dos<<"Mode:"<<m_todo<<"DataSet:"<<m_ds<<std::endl;
+  std::cout<<"Mode: "<<m_todo<<"DataSet:  "<<m_ds<<std::endl;
+  os<<"Mode:  "<<m_todo<<"DataSet:  "<<m_ds<<std::endl;
+  dos<<"Mode: "<<m_todo<<"  DataSet:  "<<m_ds<<std::endl;
 }
 
 
@@ -585,13 +576,13 @@ void VanetSim::Run()
 void VanetSim::Look_at_clock()
 {
 	std::cout<<"Now:"<<Simulator::Now().GetSeconds();
-	std::cout<<"  Mode: "<<m_todo<<"  ,DataSet"<<m_ds<<std::endl;
+	std::cout<<"  Mode: "<<m_todo<<"  ,DataSet: "<<m_ds<<std::endl;
   std::cout<<"Tx_Data_Pkts:   "<<Tx_Data_Pkts<<",   "<<Tx_Data_Pkts - old_Tx_Data_Pkts<<std::endl;
-  std::cout<<"Rx_Data_Pkts:   "<<Rx_Data_Pkts<<",   "<<Rx_Data_Pkts - old_Rx_Data_Pkts<<std::endl;
-  std::cout<<"Unique_RX_Pkts: "<<Unique_RX_Pkts<<",   "<<Unique_RX_Pkts - old_Unique_RX_Pkts<<std::endl;
+  //std::cout<<"Rx_Data_Pkts:   "<<Rx_Data_Pkts<<",   "<<Rx_Data_Pkts - old_Rx_Data_Pkts<<std::endl;
+  //std::cout<<"Unique_RX_Pkts: "<<Unique_RX_Pkts<<",   "<<Unique_RX_Pkts - old_Unique_RX_Pkts<<std::endl;
 
-  std::cout<<"Rx_Data_Pkts2:   "<<Rx_Data_Pkts2<<",   "<<Rx_Data_Pkts2 - old_Rx_Data_Pkts2<<std::endl;
-  std::cout<<"Unique_RX_Pkts2: "<<Unique_RX_Pkts2<<",   "<<Unique_RX_Pkts2 - old_Unique_RX_Pkts2<<std::endl;
+  //std::cout<<"Rx_Data_Pkts2:   "<<Rx_Data_Pkts2<<",   "<<Rx_Data_Pkts2 - old_Rx_Data_Pkts2<<std::endl;
+  //std::cout<<"Unique_RX_Pkts2: "<<Unique_RX_Pkts2<<",   "<<Unique_RX_Pkts2 - old_Unique_RX_Pkts2<<std::endl;
 
   std::cout<<"Rx_Data_Pkts3:   "<<Rx_Data_Pkts3<<",   "<<Rx_Data_Pkts3 - old_Rx_Data_Pkts3<<std::endl;
   std::cout<<"Unique_RX_Pkts3: "<<Unique_RX_Pkts3<<",   "<<Unique_RX_Pkts3 - old_Unique_RX_Pkts3<<std::endl;
@@ -600,6 +591,10 @@ void VanetSim::Look_at_clock()
   <<"Tx_Data_Pkts:   "<<Tx_Data_Pkts
   <<"Rx_Data_Pkts3:   "<<Rx_Data_Pkts3
   <<"Unique_RX_Pkts3: "<<Unique_RX_Pkts3<<std::endl;
+
+  old_Unique_RX_Pkts3 = Unique_RX_Pkts3;
+  old_Rx_Data_Pkts3 = Rx_Data_Pkts3;
+  old_Tx_Data_Pkts  = Tx_Data_Pkts;
 
 	/*Ptr<MobilityModel> Temp = m_nodes.Get (nodeNum)->GetObject<MobilityModel>();
   std::cout<<Temp->GetPosition().x<<","<<Temp->GetPosition().y<<","<<Temp->GetPosition().z<<std::endl;
@@ -647,18 +642,8 @@ VanetSim::TXTrace (Ptr<const Packet> newpacket)
 // Example to use ns2 traces file in ns3
 int main (int argc, char *argv[])
 {
-  std::vector<std::string> todo;
-  todo.push_back("AODV");
-  todo.push_back("DSDV");
-  todo.push_back("DSR");
-  todo.push_back("OLSR");
-  todo.push_back("SDN");
-  for (std::vector<std::string>::const_iterator cit = todo.begin ();
-       cit != todo.end (); ++cit)
-    {
-      VanetSim SDN_test;
-      SDN_test.Simulate(argc, argv, *cit);
-    }
+  VanetSim SDN_test;
+  SDN_test.Simulate(argc, argv);
 	return 0;
 }
 
