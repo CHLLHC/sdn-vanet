@@ -67,6 +67,7 @@ VanetSim::VanetSim()
 VanetSim::~VanetSim()
 {
 	os.close();
+	dos.close();
 }
 
 void VanetSim::Simulate(int argc, char *argv[], std::string todo)
@@ -595,7 +596,7 @@ void VanetSim::Look_at_clock()
   std::cout<<"Rx_Data_Pkts3:   "<<Rx_Data_Pkts3<<",   "<<Rx_Data_Pkts3 - old_Rx_Data_Pkts3<<std::endl;
   std::cout<<"Unique_RX_Pkts3: "<<Unique_RX_Pkts3<<",   "<<Unique_RX_Pkts3 - old_Unique_RX_Pkts3<<std::endl;
 
-  std::cout<<"Now:  "<<Simulator::Now().GetSeconds()
+  os<<"Now:  "<<Simulator::Now().GetSeconds()
   <<"Tx_Data_Pkts:   "<<Tx_Data_Pkts
   <<"Rx_Data_Pkts3:   "<<Rx_Data_Pkts3
   <<"Unique_RX_Pkts3: "<<Unique_RX_Pkts3<<std::endl;
