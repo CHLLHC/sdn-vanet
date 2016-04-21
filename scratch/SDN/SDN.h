@@ -41,7 +41,7 @@ class VanetSim
 public:
 	VanetSim();
 	~VanetSim();
-	void Simulate(int argc, char *argv[]);
+	void Simulate(int argc, char *argv[], std::string todo);
 protected:
 	void SetDefault();
 	void ParseArguments(int argc, char *argv[]);
@@ -65,6 +65,7 @@ private:
 	std::string homepath;
 	std::string folder;
 	std::ofstream os;
+	std::ofstream dos;//For Delay File
 	double freq1;//SCH
 	double freq2;//CCH
 	double txp1;//SCH
@@ -76,7 +77,6 @@ private:
 	double interval; // seconds
 	bool verbose;
 	int mod;//1=SDN Other=OLSR
-	int pmod;//0=Range(Default) 1=Other
 	uint32_t nodeNum;
 	double duration;
 	YansWifiPhyHelper m_SCHPhy, m_CCHPhy;
@@ -118,6 +118,8 @@ private:
   std::vector<int64_t> per_sec_delay_vector2;
   std::vector<int64_t> delay_vector3;
   std::vector<int64_t> per_sec_delay_vector3;
+  std::string m_todo;
+  std::string m_ds;//DataSet
 };
 
 

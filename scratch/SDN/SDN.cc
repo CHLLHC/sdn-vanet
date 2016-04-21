@@ -24,12 +24,12 @@ VanetSim::VanetSim()
 {
 	traceFile = "";
 	logFile = "SDN.log";
-	phyMode = "OfdmRate6MbpsBW10MHz";
+	phyMode = "OfdmRate27MbpsBW10MHz";
 	lossModle = "ns3::FriisPropagationLossModel";
 	freq1 = 5.860e9;  //802.11p SCH CH172
 	freq2 = 5.890e9;  //802.11p CCH CH178
-	txp1 = 20;  // dBm SCH
-	txp2 = 20;  // CCH
+	txp1 = 23;  // dBm SCH
+	txp2 = 31;  // CCH
 	range1 = 400.0;//SCH
 	range2 = 1000.0;//CCH
 	packetSize = 1000; // bytes
@@ -37,7 +37,6 @@ VanetSim::VanetSim()
 	interval = 0.1; // seconds
 	verbose = false;
 	mod = 1;
-	pmod = 0;
 	duration = -1;
 	nodeNum = 0;
 	Rx_Data_Bytes = 0;
@@ -70,8 +69,9 @@ VanetSim::~VanetSim()
 	os.close();
 }
 
-void VanetSim::Simulate(int argc, char *argv[])
+void VanetSim::Simulate(int argc, char *argv[], std::string todo)
 {
+  m_todo = todo;
 	SetDefault();
 	ParseArguments(argc, argv);
 	LoadTraffic();
@@ -104,28 +104,47 @@ void VanetSim::ParseArguments(int argc, char *argv[])
 	cmd.AddValue ("range1", "Range for SCH", range1);
 	cmd.AddValue ("range2", "Range for CCH", range2);
 	cmd.AddValue ("verbose", "turn on all WifiNetDevice log components", verbose);
-	cmd.AddValue ("mod", "0=olsr 1=sdn(DEFAULT) 2=aodv 3=dsdv 4=dsr", mod);
-	cmd.AddValue ("pmod", "0=Range(DEFAULT) 1=Other", pmod);
+	//cmd.AddValue ("mod", "0=olsr 1=sdn(DEFAULT) 2=aodv 3=dsdv 4=dsr", mod);
+	cmd.AddValue ("ds", "DataSet", m_ds);
 	cmd.Parse (argc,argv);
 
 	// Fix non-unicast data rate to be the same as that of unicast
 	Config::SetDefault ("ns3::WifiRemoteStationManager::NonUnicastMode",
 	                      StringValue (phyMode));
 
+	mod = 1;
+	if (m_todo == "AODV")
+	  mod = 2;
+  if (m_todo == "DSDV")
+    mod = 3;
+  if (m_todo == "DSR")
+    mod = 4;
+  if (m_todo == "OLSR")
+    mod = 1;
+
+/*
+	switch (m_todo)
+	{
+	  case "AODV":
+      mod = 2;
+      break;
+	  case "DSDV":
+      mod = 3;
+      break;
+	  case "DSR":
+      mod = 4;
+      break;
+	  case "OLSR":
+      mod = 0;
+      break;
+	  default:
+	    mod = 1;
+	}
+*/
 }
 
 void VanetSim::LoadTraffic()
 {
-	if (mod==0)
-	{
-		std::cout<<"Mode: OLSR-N"<<std::endl;
-		os<<"Mode: OLSR-N"<<std::endl;
-	}
-	else
-	{
-		std::cout<<"Mode: SDN"<<std::endl;
-		os<<"Mode: SDN"<<std::endl;
-	}
 	DIR* dir = NULL;
 	//DIR* subdir=NULL;
 	std::string temp(homepath+"/"+folder);
@@ -138,14 +157,21 @@ void VanetSim::LoadTraffic()
 	std::string sumo_route = temp + "/input.rou.xml";
 	std::string sumo_fcd = temp + "/input.fcd.xml";
 
-	std::string output = temp + "/result_w_delay.txt";
+	std::string output = temp + "/" + m_todo + "_" + m_ds + "_result_new.txt";
+	std::string delay_output = temp + "/" + m_todo + "_" + m_ds +"_delay.txt";
+
 
 	os.open(output.data(),std::ios::out);
+	dos.open(delay_output.data(),std::ios::out);
 
 	ns3::vanetmobility::VANETmobilityHelper mobilityHelper;
 	VMo=mobilityHelper.GetSumoMObility(sumo_net,sumo_route,sumo_fcd);
 
 	nodeNum = VMo->GetNodeSize();
+
+  std::cout<<"Mode:"<<m_todo<<"DataSet:"<<m_ds<<std::endl;
+  os<<"Mode:"<<m_todo<<"DataSet:"<<m_ds<<std::endl;
+  dos<<"Mode:"<<m_todo<<"DataSet:"<<m_ds<<std::endl;
 }
 
 
@@ -175,27 +201,10 @@ void VanetSim::ConfigChannels()
 	//===channel
 	YansWifiChannelHelper SCHChannel;
 	SCHChannel.SetPropagationDelay ("ns3::ConstantSpeedPropagationDelayModel");
-	if (pmod == 1)
-	{
-		SCHChannel.AddPropagationLoss(lossModle,"Frequency", DoubleValue(freq1));
-	}
-	else
-	{
-		SCHChannel.AddPropagationLoss("ns3::RangePropagationLossModel", "MaxRange",
-				DoubleValue(range1));
-	}
+	SCHChannel.AddPropagationLoss(lossModle,"Frequency", DoubleValue(freq1));
 	YansWifiChannelHelper CCHChannel;
 	CCHChannel.SetPropagationDelay ("ns3::ConstantSpeedPropagationDelayModel");
-	if (pmod ==1)
-	{
-		CCHChannel.AddPropagationLoss(lossModle,"Frequency", DoubleValue(freq2));
-	}
-	else
-	{
-		CCHChannel.AddPropagationLoss("ns3::RangePropagationLossModel", "MaxRange",
-				DoubleValue(range2));
-	}
-
+	CCHChannel.AddPropagationLoss(lossModle,"Frequency", DoubleValue(freq2));
 
 
 	// the channelg
@@ -491,7 +500,7 @@ void VanetSim::ReceiveDataPacket3(Ptr<Socket> socket)
           Time now = Simulator::Now ();
           int64_t temp = now.GetMicroSeconds () - delay[uid].GetMicroSeconds ();
           delay_vector3.push_back (temp);
-          os<<"Pdelay"<<temp<<std::endl;
+          dos<<temp<<std::endl;
           per_sec_delay_vector3.push_back (temp);
         }
       //Rx_Data_Bytes += packet->GetSize();
@@ -557,6 +566,7 @@ void VanetSim::ProcessOutputs()
 	  {
 	    std::cout<<"NO PACKETS WERE RECEIVED."<<std::endl;
 	    os<<"NO PACKETS WERE RECEIVED."<<std::endl;
+	    dos<<"NO PACKETS WERE RECEIVED."<<std::endl;
 	  }
 }
 
@@ -573,7 +583,8 @@ void VanetSim::Run()
 
 void VanetSim::Look_at_clock()
 {
-	std::cout<<"Now:"<<Simulator::Now().GetSeconds()<<std::endl;
+	std::cout<<"Now:"<<Simulator::Now().GetSeconds();
+	std::cout<<"  Mode: "<<m_todo<<"  ,DataSet"<<m_ds<<std::endl;
   std::cout<<"Tx_Data_Pkts:   "<<Tx_Data_Pkts<<",   "<<Tx_Data_Pkts - old_Tx_Data_Pkts<<std::endl;
   std::cout<<"Rx_Data_Pkts:   "<<Rx_Data_Pkts<<",   "<<Rx_Data_Pkts - old_Rx_Data_Pkts<<std::endl;
   std::cout<<"Unique_RX_Pkts: "<<Unique_RX_Pkts<<",   "<<Unique_RX_Pkts - old_Unique_RX_Pkts<<std::endl;
@@ -583,34 +594,11 @@ void VanetSim::Look_at_clock()
 
   std::cout<<"Rx_Data_Pkts3:   "<<Rx_Data_Pkts3<<",   "<<Rx_Data_Pkts3 - old_Rx_Data_Pkts3<<std::endl;
   std::cout<<"Unique_RX_Pkts3: "<<Unique_RX_Pkts3<<",   "<<Unique_RX_Pkts3 - old_Unique_RX_Pkts3<<std::endl;
-  double avg = 0;
-  for (std::vector<int64_t>::const_iterator cit = per_sec_delay_vector3.begin ();
-       cit != per_sec_delay_vector3.end ();++cit)
-    {
-      avg += *cit;
-    }
 
-  if (avg >0)
-    {
-      avg /= per_sec_delay_vector3.size();
-    }
-
-  per_sec_delay_vector3.clear ();
-
-  os<<"Acc:"<<Simulator::Now().GetSeconds()<<","<<Tx_Data_Pkts<<","<<Rx_Data_Pkts3<<","<<Unique_RX_Pkts3<<std::endl;
-  os<<"Inc:"<<Simulator::Now().GetSeconds()<<","<<Tx_Data_Pkts - old_Tx_Data_Pkts<<","
-    <<Rx_Data_Pkts3 - old_Rx_Data_Pkts3<<","<<Unique_RX_Pkts3 - old_Unique_RX_Pkts3<<","<<avg<<std::endl;
-
-  old_Rx_Data_Pkts = Rx_Data_Pkts;
-  old_Tx_Data_Pkts = Tx_Data_Pkts;
-  old_Unique_RX_Pkts = Unique_RX_Pkts;
-
-  old_Rx_Data_Pkts2 = Rx_Data_Pkts2;
-  old_Unique_RX_Pkts2 = Unique_RX_Pkts2;
-
-  old_Rx_Data_Pkts3 = Rx_Data_Pkts3;
-  old_Unique_RX_Pkts3 = Unique_RX_Pkts3;
-
+  std::cout<<"Now:  "<<Simulator::Now().GetSeconds()
+  <<"Tx_Data_Pkts:   "<<Tx_Data_Pkts
+  <<"Rx_Data_Pkts3:   "<<Rx_Data_Pkts3
+  <<"Unique_RX_Pkts3: "<<Unique_RX_Pkts3<<std::endl;
 
 	/*Ptr<MobilityModel> Temp = m_nodes.Get (nodeNum)->GetObject<MobilityModel>();
   std::cout<<Temp->GetPosition().x<<","<<Temp->GetPosition().y<<","<<Temp->GetPosition().z<<std::endl;
@@ -658,8 +646,18 @@ VanetSim::TXTrace (Ptr<const Packet> newpacket)
 // Example to use ns2 traces file in ns3
 int main (int argc, char *argv[])
 {
-	VanetSim SDN_test;
-	SDN_test.Simulate(argc, argv);
+  std::vector<std::string> todo;
+  todo.push_back("AODV");
+  todo.push_back("DSDV");
+  todo.push_back("DSR");
+  todo.push_back("OLSR");
+  todo.push_back("SDN");
+  for (std::vector<std::string>::const_iterator cit = todo.begin ();
+       cit != todo.end (); ++cit)
+    {
+      VanetSim SDN_test;
+      SDN_test.Simulate(argc, argv, *cit);
+    }
 	return 0;
 }
 
