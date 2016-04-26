@@ -104,7 +104,7 @@ void VanetSim::ParseArguments(int argc, char *argv[])
 	cmd.AddValue ("range1", "Range for SCH", range1);
 	cmd.AddValue ("range2", "Range for CCH", range2);
 	cmd.AddValue ("verbose", "turn on all WifiNetDevice log components", verbose);
-	cmd.AddValue ("mod", "0=olsr 1=sdn(DEFAULT) 2=aodv 3=dsdv 4=dsr", mod);
+	cmd.AddValue ("mod", "0=olsr 1=bs-sdn(DEFAULT) 2=aodv 3=dsdv 4=dsr 5=yangs-sdn", mod);
 	cmd.AddValue ("ds", "DataSet", m_ds);
 	cmd.Parse (argc,argv);
 
@@ -127,8 +127,11 @@ void VanetSim::ParseArguments(int argc, char *argv[])
     case 0:
       m_todo = "OLSR";
       break;
+    case 5:
+      m_todo = "YANGS-SDN";
+      break;
     default:
-      m_todo = "SDN";
+      m_todo = "BS-SDN";
       mod = 1;
       break;
 	}
@@ -345,7 +348,7 @@ void VanetSim::ConfigApp()
 	std::cout<<"IPV4S Assigned"<<std::endl;
 
 	Ipv4AddressHelper ipv4C;
-	if (mod ==1)
+	if ((mod ==1)||(mod ==5))
 	{
 		NS_LOG_INFO ("Assign IP-C Addresses.");
 		ipv4C.SetBase("192.168.0.0","255.255.0.0");//CCH
@@ -359,16 +362,22 @@ void VanetSim::ConfigApp()
         routing->SetCCHInterface (m_CCHInterfaces.Get (i).second);
 		    routing->SetSCHInterface (m_SCHInterfaces.Get (i).second);
 		  }
+
+		sdn::Algo ToBeSet = sdn::Binary_Search;
+		if (mod == 5)
+		  {
+		    ToBeSet = sdn::Yangs_Algo;
+		  }
 		Ptr<sdn::RoutingProtocol> routing =
 		            m_nodes.Get (nodeNum)->GetObject<sdn::RoutingProtocol> ();
 		routing->SetControllArea (Vector2D (0,0), Vector2D (1000,-10));
-		routing->SetAlgo (sdn::Yangs_Algo);
+		routing->SetAlgo (ToBeSet);
 		routing = m_nodes.Get (nodeNum+3)->GetObject<sdn::RoutingProtocol> ();
 		routing->SetControllArea (Vector2D (1000,0), Vector2D (1010,1000));
-		routing->SetAlgo (sdn::Binary_Search);
+		routing->SetAlgo (ToBeSet);
 		routing = m_nodes.Get (nodeNum+4)->GetObject<sdn::RoutingProtocol> ();
 		routing->SetControllArea (Vector2D (1010,1000), Vector2D (2000,990));
-		routing->SetAlgo (sdn::Binary_Search);
+		routing->SetAlgo (ToBeSet);
 	}
 
 
@@ -377,7 +386,7 @@ void VanetSim::ConfigApp()
 
 	//onoff
 	Address remote;
-	if (mod == 1)
+	if ((mod == 1)||(mod==5))
 	  {
 	    std::pair<Ptr<Ipv4>, uint32_t> RetValue = m_SCHInterfaces.Get (nodeNum+1);
 	    Ipv4InterfaceAddress theinterface = RetValue.first->GetAddress (RetValue.second, 0);

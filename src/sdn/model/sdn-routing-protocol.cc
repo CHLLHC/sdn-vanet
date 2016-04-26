@@ -452,6 +452,7 @@ RoutingProtocol::ProcessHM (const sdn::MessageHeader &msg)
           if (it->second.appointmentResult == FORWARDER)
             {
               std::cout<<"miscalculation on FORWARDER Car:"<<Ipv4toString (ID)<<std::endl;
+              m_linkEstablished = false;
               ComputeRoute ();
             }
         }
@@ -1900,6 +1901,10 @@ RoutingProtocol::Reschedule ()
       if (t2l<1e-5)
         {
           t2l = m_minAPInterval.GetSeconds ();
+        }
+      if (m_apTimer.IsRunning ())
+        {
+          m_apTimer.Remove ();
         }
       m_apTimer.Schedule(Seconds(t2l));
       //std::cout<<"Reschedule:"<<t2l<<"s."<<"p:"<<dx<<",v:"<<vx<<std::endl;
