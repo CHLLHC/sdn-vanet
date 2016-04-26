@@ -143,7 +143,8 @@ RoutingProtocol::RoutingProtocol ()
     m_lc_controllArea_vaild (false),
     m_norespond_hm (0),
     m_car_lc_ack_vaild (false),
-    m_lowerbound (0)
+    m_lowerbound (0),
+    m_algorithm (Binary_Search)
 {
   m_uniformRandomVariable = CreateObject<UniformRandomVariable> ();
 }
@@ -281,6 +282,12 @@ RoutingProtocol::SetSCHInterface (uint32_t interface)
             temp_if_add.GetLocal (),
             m_SCHinterface);
   //std::cout<<"SetSCHInterface "<<m_mainAddress.Get ()%256<<std::endl;
+}
+
+void
+RoutingProtocol::SetAlgo (Algo which)
+{
+  m_algorithm = which;
 }
 
 void
@@ -1210,38 +1217,55 @@ RoutingProtocol::ComputeRoute ()
   //std::cout<<"RemoveTimeOut"<<std::endl;
   RemoveTimeOut (); //Remove Stale Tuple
 
-  /*
-  if (!m_linkEstablished)
+  if (m_algorithm == Yangs_Algo)
     {
-      //std::cout<<"Do_Init_Compute"<<std::endl;
-      Do_Init_Compute ();
+      if (!m_linkEstablished)
+        {
+          //std::cout<<"Do_Init_Compute"<<std::endl;
+          Do_Init_Compute ();
+        }
+      else
+        {
+          //std::cout<<"Do_Update"<<std::endl;
+          Do_Update ();
+        }
+      if (m_linkEstablished)
+        {
+          //std::cout<<"SendAppointment"<<std::endl;
+          SendLc2Lc ();
+          std::cout<<"CHAIN:"<<std::endl;
+          for (std::list<Ipv4Address>::const_iterator cit = m_forward_chain.begin ();
+               cit != m_forward_chain.end (); ++cit)
+            {
+              std::cout<<Ipv4toString((*cit))<<"("<<CalcDist (m_lc_info[*cit].GetPos (),m_lc_start)<<"),"<<std::endl;
+              CalcDontForward (*cit);
+              SendDontForward (*cit);
+            }
+          SendAppointment ();
+          //std::cout<<"SendLC2LC"<<std::endl;
+        }
+      Reschedule ();
     }
   else
     {
-      //std::cout<<"Do_Update"<<std::endl;
-      Do_Update ();
-    }
-  */
-
-  BinarySearch ();
-
-  if (m_linkEstablished)
-    {
-      //std::cout<<"SendAppointment"<<std::endl;
-      SendLc2Lc ();
-      std::cout<<"CHAIN:"<<std::endl;
-      for (std::list<Ipv4Address>::const_iterator cit = m_forward_chain.begin ();
-           cit != m_forward_chain.end (); ++cit)
+      BinarySearch ();
+      if (m_linkEstablished)
         {
-          std::cout<<Ipv4toString((*cit))<<"("<<CalcDist (m_lc_info[*cit].GetPos (),m_lc_start)<<"),"<<std::endl;
-          CalcDontForward (*cit);
-          SendDontForward (*cit);
+          //std::cout<<"SendAppointment"<<std::endl;
+          SendLc2Lc ();
+          std::cout<<"CHAIN:"<<std::endl;
+          for (std::list<Ipv4Address>::const_iterator cit = m_forward_chain.begin ();
+               cit != m_forward_chain.end (); ++cit)
+            {
+              std::cout<<Ipv4toString((*cit))<<"("<<CalcDist (m_lc_info[*cit].GetPos (),m_lc_start)<<"),"<<std::endl;
+              CalcDontForward (*cit);
+              SendDontForward (*cit);
+            }
+          SendAppointment ();
+          //std::cout<<"SendLC2LC"<<std::endl;
         }
-      SendAppointment ();
-      //std::cout<<"SendLC2LC"<<std::endl;
+      BSReschedule ();
     }
-  //std::cout<<"BSReschedule"<<std::endl;
-  BSReschedule ();
   std::cout<<"CR DONE"<<std::endl;
 }//RoutingProtocol::ComputeRoute
 

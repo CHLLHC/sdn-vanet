@@ -324,8 +324,8 @@ void VanetSim::ConfigApp()
         sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+1), sdn::OTHERS);//Source
         sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+2), sdn::OTHERS);//Sink
 
-        sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+3), sdn::LOCAL_CONTROLLER);//LC2
-        sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+4), sdn::LOCAL_CONTROLLER);//LC3
+        sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+3), sdn::OTHERS);//LC2
+        sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+4), sdn::OTHERS);//LC3
         sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+5), sdn::OTHERS);//Sink2
         sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+6), sdn::OTHERS);//Sink3
         sdn.SetSR (range1);
@@ -362,10 +362,13 @@ void VanetSim::ConfigApp()
 		Ptr<sdn::RoutingProtocol> routing =
 		            m_nodes.Get (nodeNum)->GetObject<sdn::RoutingProtocol> ();
 		routing->SetControllArea (Vector2D (0,0), Vector2D (1000,-10));
+		routing->SetAlgo (sdn::Yangs_Algo);
 		routing = m_nodes.Get (nodeNum+3)->GetObject<sdn::RoutingProtocol> ();
 		routing->SetControllArea (Vector2D (1000,0), Vector2D (1010,1000));
+		routing->SetAlgo (sdn::Binary_Search);
 		routing = m_nodes.Get (nodeNum+4)->GetObject<sdn::RoutingProtocol> ();
 		routing->SetControllArea (Vector2D (1010,1000), Vector2D (2000,990));
+		routing->SetAlgo (sdn::Binary_Search);
 	}
 
 

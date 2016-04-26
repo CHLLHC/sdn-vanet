@@ -47,6 +47,7 @@ std::string
 Ipv4toString (const Ipv4Address& address);
 
 enum NodeType {CAR, LOCAL_CONTROLLER, OTHERS};
+enum Algo {Yangs_Algo, Binary_Search};
 
 /// An SDN's routing table entry.
 struct RoutingTableEntry
@@ -135,6 +136,7 @@ public:
   ///
   void SetSCHInterface (uint32_t interface);//implemented
   void SetCCHInterface (uint32_t interface);//implemented
+  void SetAlgo (Algo which);
 
   ///
   /// Dump the routing table
@@ -390,6 +392,7 @@ private:
   double GetProjection (const Vector3D &vel) const;
   std::vector<std::pair<Ipv4Address, double> > m_bs_sort;
   double m_lowerbound;
+  Algo m_algorithm;
 };
 
 
