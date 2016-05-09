@@ -72,6 +72,7 @@ VanetSim::~VanetSim()
 
 void VanetSim::Simulate(int argc, char *argv[])
 {
+  std::ios_base::sync_with_stdio (false);
 	SetDefault();
 	ParseArguments(argc, argv);
 	LoadTraffic();
@@ -464,7 +465,7 @@ void VanetSim::ReceiveDataPacket(Ptr<Socket> socket)
 	      }
       //Rx_Data_Bytes += packet->GetSize();
       Rx_Data_Pkts++;
-      //std::cout<<".";
+      //std::cout<<"."<<std::flush;
 	  }
 }
 
@@ -486,7 +487,7 @@ void VanetSim::ReceiveDataPacket2(Ptr<Socket> socket)
         }
       //Rx_Data_Bytes += packet->GetSize();
       Rx_Data_Pkts2++;
-      //std::cout<<".";
+      //std::cout<<":"<<std::flush;
     }
 }
 
@@ -509,7 +510,7 @@ void VanetSim::ReceiveDataPacket3(Ptr<Socket> socket)
         }
       //Rx_Data_Bytes += packet->GetSize();
       Rx_Data_Pkts3++;
-      //std::cout<<".";
+      //std::cout<<"/"<<std::flush;
     }
 }
 

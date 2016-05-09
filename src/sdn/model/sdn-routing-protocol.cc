@@ -729,7 +729,6 @@ RoutingProtocol::RouteInput(Ptr<const Packet> p,
   NS_LOG_FUNCTION (this << " " << m_ipv4->GetObject<Node> ()->GetId () << " " << header.GetDestination ());
   //TODO
   //std::cout<<m_mainAddress.Get ()%256<<" "<<header.GetDestination ().Get () %256<<std::endl;
-  //bool lcb_status = false;
   Ipv4Address dest = header.GetDestination();
   Ipv4Address sour = header.GetSource();
 
@@ -1222,18 +1221,18 @@ RoutingProtocol::ComputeRoute ()
     {
       if (!m_linkEstablished)
         {
-          //std::cout<<"Do_Init_Compute"<<std::endl;
+          std::cout<<"Do_Init_Compute"<<std::endl;
           Do_Init_Compute ();
         }
       else
         {
-          //std::cout<<"Do_Update"<<std::endl;
+          std::cout<<"Do_Update"<<std::endl;
           Do_Update ();
         }
       if (m_linkEstablished)
         {
-          //std::cout<<"SendAppointment"<<std::endl;
           SendLc2Lc ();
+          std::cout<<"SendLC2LC"<<std::endl;
           std::cout<<"CHAIN:"<<std::endl;
           for (std::list<Ipv4Address>::const_iterator cit = m_forward_chain.begin ();
                cit != m_forward_chain.end (); ++cit)
@@ -1242,17 +1241,18 @@ RoutingProtocol::ComputeRoute ()
               CalcDontForward (*cit);
               SendDontForward (*cit);
             }
+          std::cout<<"SendAppointment"<<std::endl;
           SendAppointment ();
-          //std::cout<<"SendLC2LC"<<std::endl;
         }
       Reschedule ();
     }
   else
     {
+      std::cout<<"BinarySearch"<<std::endl;
       BinarySearch ();
       if (m_linkEstablished)
         {
-          //std::cout<<"SendAppointment"<<std::endl;
+          std::cout<<"SendLC2LC"<<std::endl;
           SendLc2Lc ();
           std::cout<<"CHAIN:"<<std::endl;
           for (std::list<Ipv4Address>::const_iterator cit = m_forward_chain.begin ();
@@ -1263,7 +1263,7 @@ RoutingProtocol::ComputeRoute ()
               SendDontForward (*cit);
             }
           SendAppointment ();
-          //std::cout<<"SendLC2LC"<<std::endl;
+          std::cout<<"SendAppointment"<<std::endl;
         }
       BSReschedule ();
     }
@@ -1502,13 +1502,13 @@ RoutingProtocol::BSReschedule ()
 void
 RoutingProtocol::Do_Init_Compute ()
 {
-  //std::cout<<"Partition"<<std::endl;
+  std::cout<<"Partition"<<std::endl;
   Partition ();
 
-  //std::cout<<"SetN_Init"<<std::endl;
+  std::cout<<"SetN_Init"<<std::endl;
   SetN_Init ();
 
-  //std::cout<<"OtherSet_Init"<<std::endl;
+  std::cout<<"OtherSet_Init"<<std::endl;
   OtherSet_Init ();
 
   /*std::cout<<"Next:";
@@ -1519,24 +1519,24 @@ RoutingProtocol::Do_Init_Compute ()
     }
   std::cout<<std::endl;
 */
-  //std::cout<<"SelectNode"<<std::endl;
+  std::cout<<"SelectNode"<<std::endl;
   SelectNode ();
-  //std::cout<<"Do_Init_Compute DONE"<<std::endl;
+  std::cout<<"Do_Init_Compute DONE"<<std::endl;
 }
 
 void
 RoutingProtocol::Do_Update ()
 {
-  //std::cout<<"Partition"<<std::endl;
+  std::cout<<"Partition"<<std::endl;
   Partition ();
-  //std::cout<<"CalcSetZero"<<std::endl;
+  std::cout<<"CalcSetZero"<<std::endl;
   CalcSetZero ();
-  //std::cout<<"SelectNewNodeInAreaZero"<<std::endl;
+  std::cout<<"SelectNewNodeInAreaZero"<<std::endl;
   SelectNewNodeInAreaZero ();
-  //std::cout<<"Do_Update DONE"<<std::endl;
+  std::cout<<"Do_Update DONE"<<std::endl;
   if (!m_linkEstablished)
     {
-      //std::cout<<"!m_linkEstablished"<<std::endl;
+      std::cout<<"!m_linkEstablished"<<std::endl;
       Do_Init_Compute ();
     }
 }
@@ -1746,19 +1746,21 @@ RoutingProtocol::SelectNode ()
         }*/
     }
   //std::cout<<std::endl;
-
-  double vx = GetProjection (m_lc_info[m_theFirstCar].Velocity);
-  double dx = CalcDist (m_lc_info[m_theFirstCar].GetPos (), m_lc_start);
-  double t2l;
-  if (vx < 1e-7)
+  if (m_theFirstCar != Ipv4Address::GetZero ())
     {
-      m_linkEstablished = false;
-    }
-  else
-    {
-      t2l= (0.5 * m_signal_range - dx) / vx;
-      if (t2l<1)
-        m_linkEstablished = false;
+      double vx = GetProjection (m_lc_info[m_theFirstCar].Velocity);
+      double dx = CalcDist (m_lc_info[m_theFirstCar].GetPos (), m_lc_start);
+      double t2l;
+      if (vx < 1e-7)
+        {
+          m_linkEstablished = false;
+        }
+      else
+        {
+          t2l= (0.5 * m_signal_range - dx) / vx;
+          if (t2l<1)
+            m_linkEstablished = false;
+        }
     }
 
 
@@ -1789,6 +1791,7 @@ RoutingProtocol::CalcSetZero ()
 void
 RoutingProtocol::SelectNewNodeInAreaZero ()
 {
+  std::cout<<"BP1"<<std::endl;
   uint32_t thezero = 0;
   Ipv4Address The_Car (thezero);
   uint32_t minhop_of_tc = INFHOP;
@@ -1814,7 +1817,7 @@ RoutingProtocol::SelectNewNodeInAreaZero ()
               }
           }
     }
-
+  std::cout<<"BP2"<<std::endl;
   if (The_Car != Ipv4Address::GetZero ())//! NO CAR IN AREA 0 HAVE a link to area 1
     {
       if (m_lc_info[The_Car].ID_of_minhop == m_theFirstCar)
@@ -1833,8 +1836,10 @@ RoutingProtocol::SelectNewNodeInAreaZero ()
           m_theFirstCar = The_Car;
           //std::cout<<GetNumArea();
           //std::cout<<"Chain ";
+          std::cout<<"BP3"<<std::endl;
           while (m_lc_info.find (The_Car) != m_lc_info.end ())
             {
+              std::cout<<Ipv4toString (The_Car)<<std::endl;
               m_forward_chain.push_back (The_Car);
               //double oldp = CalcDist (m_lc_info[The_Car].GetPos (), m_lc_start);
               //std::cout<<The_Car.Get () % 256<<"("<<oldp<<","<<m_lc_info[The_Car].minhop<<")";
@@ -1852,7 +1857,7 @@ RoutingProtocol::SelectNewNodeInAreaZero ()
             }
           //std::cout<<std::endl;
         }
-
+      std::cout<<"BP4"<<std::endl;
       //Time to short?
       double vx = GetProjection (m_lc_info[m_theFirstCar].Velocity);
       double dx = CalcDist (m_lc_info[m_theFirstCar].GetPos (), m_lc_start);
