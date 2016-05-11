@@ -61,13 +61,6 @@ public:
    */
   SdnHelper* Copy (void) const;
 
-  /**
-    * \param node the node for which an exception is to be defined
-    * \param interface an interface of node on which SDN is not to be installed
-    *
-    * This method allows the user to specify an interface on which SDN is not to be installed on
-    */
-  void ExcludeInterface (Ptr<Node> node, uint32_t interface);
 
   /**
    * \param node the node on which the routing protocol will run
@@ -98,12 +91,6 @@ public:
   */
   int64_t AssignStreams (NodeContainer c, int64_t stream);
 
-  //Wrong => If the object, mobility has been installed into the node, we can get node's mobility from using GetObject()
-  //Ipv4Routing just get IPV4 object from the node, so mobility must pass to this algorithm by other methods.
-  //But node will pass to helper while calling the Create function, so it can be done there.
-  /*void SetMobility (Ptr<Node> node, Ptr<MobilityModel> mo);
-*/
-
 
   /**
    * Set Node type to nodes
@@ -124,8 +111,6 @@ private:
   SdnHelper &operator = (const SdnHelper &o);
   ObjectFactory m_agentFactory;
   std::map< Ptr<Node>, sdn::NodeType > m_ntmap;
-  std::map< Ptr<Node>, std::set<uint32_t> > m_interfaceExclusions;
-  double m_rl;
   double m_sr;
 };
 

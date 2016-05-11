@@ -29,8 +29,6 @@
 #define SDN_PKT_HEADER_SIZE 8
 #define SDN_MSG_HEADER_SIZE 8
 #define SDN_HELLO_HEADER_SIZE 28
-#define SDN_RM_HEADER_SIZE 16
-#define SDN_RM_TUPLE_SIZE 3
 #define SDN_APPOINTMENT_HEADER_SIZE 8
 #define SDN_ACKHELLO_HEADER_SIZE 44
 #define SDN_DONTFORWARD_HEADER_SIZE 8
@@ -170,9 +168,6 @@ MessageHeader::GetSerializedSize (void) const
             << m_message.hello.GetSerializedSize ());
       size += m_message.hello.GetSerializedSize ();
       break;
-    case ROUTING_MESSAGE:
-      size += m_message.rm.GetSerializedSize ();
-      break;
     case APPOINTMENT_MESSAGE:
       size += m_message.appointment.GetSerializedSize ();
       break;
@@ -212,9 +207,6 @@ MessageHeader::Serialize (Buffer::Iterator start) const
     case HELLO_MESSAGE:
       m_message.hello.Serialize (i);
       break;
-    case ROUTING_MESSAGE:
-      m_message.rm.Serialize (i);
-      break;
     case APPOINTMENT_MESSAGE:
       m_message.appointment.Serialize (i);
       break;
@@ -250,10 +242,6 @@ MessageHeader::Deserialize (Buffer::Iterator start)
     case HELLO_MESSAGE:
       size += 
         m_message.hello.Deserialize (i, m_messageSize - SDN_MSG_HEADER_SIZE);
-      break;
-    case ROUTING_MESSAGE:
-      size += 
-        m_message.rm.Deserialize (i, m_messageSize - SDN_MSG_HEADER_SIZE);
       break;
     case APPOINTMENT_MESSAGE:
       size +=
@@ -325,75 +313,6 @@ MessageHeader::Hello::Deserialize (Buffer::Iterator start,
   this->velocity.Y = i.ReadNtohU32();
   this->velocity.Z = i.ReadNtohU32();
 
-  return (messageSize);
-}
-
-
-
-// ---------------- SDN Routing Message -------------------------------
-
-uint32_t 
-MessageHeader::Rm::GetSerializedSize (void) const
-{
-  return (SDN_RM_HEADER_SIZE +
-    this->routingTables.size () * IPV4_ADDRESS_SIZE * SDN_RM_TUPLE_SIZE);
-}
-
-void 
-MessageHeader::Rm::Print (std::ostream &os) const
-{
-  /// \todo
-}
-
-void
-MessageHeader::Rm::Serialize (Buffer::Iterator start) const
-{
-  Buffer::Iterator i = start;
-
-  i.WriteHtonU32 (this->routingMessageSize);
-  i.WriteHtonU32 (this->ID.Get());
-
-  for (std::vector<Routing_Tuple>::const_iterator iter = 
-    this->routingTables.begin (); 
-    iter != this->routingTables.end (); 
-    iter++)
-    {
-      i.WriteHtonU32 (iter->destAddress.Get());
-      i.WriteHtonU32 (iter->mask.Get());
-      i.WriteHtonU32 (iter->nextHop.Get());
-    }
-}
-
-uint32_t
-MessageHeader::Rm::Deserialize (Buffer::Iterator start, 
-  uint32_t messageSize)
-{
-  Buffer::Iterator i = start;
-
-  this->routingTables.clear ();
-  NS_ASSERT (messageSize >= SDN_RM_HEADER_SIZE);
-
-  this->routingMessageSize = i.ReadNtohU32 ();
-  uint32_t add_temp = i.ReadNtohU32();
-  this->ID.Set(add_temp);
-
-  NS_ASSERT ((messageSize - SDN_RM_HEADER_SIZE) % 
-    (IPV4_ADDRESS_SIZE * SDN_RM_TUPLE_SIZE) == 0);
-    
-  int numTuples = (messageSize - SDN_RM_HEADER_SIZE) 
-    / (IPV4_ADDRESS_SIZE * SDN_RM_TUPLE_SIZE);
-  for (int n = 0; n < numTuples; ++n)
-  {
-    Routing_Tuple temp_tuple;
-    uint32_t temp_dest = i.ReadNtohU32();
-    uint32_t temp_mask = i.ReadNtohU32();
-    uint32_t temp_next = i.ReadNtohU32();
-    temp_tuple.destAddress.Set(temp_dest);
-    temp_tuple.mask.Set(temp_mask);
-    temp_tuple.nextHop.Set(temp_next);
-    this->routingTables.push_back (temp_tuple);
-   }
-    
   return (messageSize);
 }
 

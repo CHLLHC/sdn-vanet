@@ -324,7 +324,6 @@ void VanetSim::ConfigApp()
             sdn.SetNodeTypeMap (m_nodes.Get (i), sdn::CAR);
           }
         sdn.SetNodeTypeMap (m_nodes.Get (nodeNum), sdn::LOCAL_CONTROLLER);
-        //sdn.ExcludeInterface (m_nodes.Get (nodeNum), 0);
         sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+1), sdn::OTHERS);//Source
         sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+2), sdn::OTHERS);//Sink
 

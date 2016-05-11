@@ -123,7 +123,6 @@ public:
 
   enum MessageType {
     HELLO_MESSAGE,
-    ROUTING_MESSAGE,
     APPOINTMENT_MESSAGE,
     ACKHELLO_MESSAGE,
     DONT_FORWARD,
@@ -271,60 +270,6 @@ public:
                       rIEEE754(this->velocity.Y),
                       rIEEE754(this->velocity.Z));
     }
-
-    void Print (std::ostream &os) const;
-    uint32_t GetSerializedSize (void) const;
-    void Serialize (Buffer::Iterator start) const;
-    uint32_t Deserialize (Buffer::Iterator start, uint32_t messageSize);
-  };
-
-  //  Routing Message Format
-  //    One RM is for one car only.
-  //    But one car may need multiple RM to form proper routing table.
-  //    The proposed format of a routing message is as follows:
-  //
-  //        0                   1                   2                   3
-  //        0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-  //       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-  //       |                     Routing Message Size                      |
-  //       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-  //       |                      sourceAddress(ID)                        |
-  //       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-  //       |                          destAddress                          |
-  //       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-  //       |                             Mask                              |
-  //       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-  //       |                            nextHop                            |
-  //       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-  //       |                          destAddress                          |
-  //       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-  //       |                             Mask                              |
-  //       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-  //       |                            nextHop                            |
-  //       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-  //       :                                                               :
-  //       :                               :
-  //   ID is the car's ID of this routing table.
-  struct Rm
-  {
-    struct Routing_Tuple{
-      Ipv4Address destAddress, mask, nextHop;
-    };
-    
-    uint32_t routingMessageSize;
-    void SetRoutingMessageSize(uint32_t rms)
-    {
-      this->routingMessageSize = rms;
-    }
-    uint32_t GetRoutingMessageSize() const
-    {
-      return (this->routingMessageSize);
-    }
-    
-    Ipv4Address ID;
-    
-    std::vector<Routing_Tuple> routingTables;
-    
 
     void Print (std::ostream &os) const;
     uint32_t GetSerializedSize (void) const;
@@ -549,7 +494,6 @@ private:
   struct
   {
     Hello hello;
-    Rm rm;
     Appointment appointment;
     AckHello ackhello;
     DontForward dontforward;
@@ -569,19 +513,6 @@ public:
         NS_ASSERT (m_messageType == HELLO_MESSAGE);
       }
     return (m_message.hello);
-  }
-
-  Rm& GetRm ()
-  {
-    if (m_messageType == 0)
-      {
-        m_messageType = ROUTING_MESSAGE;
-      }
-    else
-      {
-        NS_ASSERT (m_messageType == ROUTING_MESSAGE);
-      }
-    return (m_message.rm);
   }
 
   Appointment& GetAppointment ()
@@ -640,12 +571,6 @@ public:
   {
     NS_ASSERT (m_messageType == HELLO_MESSAGE);
     return (m_message.hello);
-  }
-
-  const Rm& GetRm () const
-  {
-    NS_ASSERT (m_messageType == ROUTING_MESSAGE);
-    return (m_message.rm);
   }
 
   const Appointment& GetAppointment () const
