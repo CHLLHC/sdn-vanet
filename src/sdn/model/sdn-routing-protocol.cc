@@ -47,8 +47,6 @@
 #include "ns3/trace-source-accessor.h"
 #include "ns3/ipv4-header.h"
 
-#include "stdlib.h" //ABS
-
 #include <ostream>
 
 /********** Useful macros **********/
@@ -90,6 +88,13 @@ namespace sdn {
 
 NS_LOG_COMPONENT_DEFINE ("SdnRoutingProtocol");
 
+//Double ABS
+double
+dabs (double x)
+{
+  return x > 0 ? x : -x;
+}
+
 std::string
 Ipv4toString (const Ipv4Address& address)
 {
@@ -117,11 +122,9 @@ RoutingProtocol::RoutingProtocol ()
     m_packetSequenceNumber (SDN_MAX_SEQ_NUM),
     m_messageSequenceNumber (SDN_MAX_SEQ_NUM),
     m_helloInterval (Seconds(1)),
-    m_rmInterval (Seconds (2)),
     m_minAPInterval (Seconds (1)),
     m_ipv4 (0),
     m_helloTimer (Timer::CANCEL_ON_DESTROY),
-    m_rmTimer (Timer::CANCEL_ON_DESTROY),
     m_apTimer (Timer::CANCEL_ON_DESTROY),
     m_queuedMessagesTimer (Timer::CANCEL_ON_DESTROY),
     m_SCHinterface (0),
@@ -137,7 +140,9 @@ RoutingProtocol::RoutingProtocol ()
     m_safety_raito (0.9),
     m_lc_controllArea_vaild (false),
     m_norespond_hm (0),
-    m_car_lc_ack_vaild (false)
+    m_car_lc_ack_vaild (false),
+    m_lowerbound (0),
+    m_algorithm (Binary_Search)
 {
   m_uniformRandomVariable = CreateObject<UniformRandomVariable> ();
 }
@@ -157,8 +162,6 @@ RoutingProtocol::SetIpv4 (Ptr<Ipv4> ipv4)
     (&RoutingProtocol::HelloTimerExpire, this);
   m_queuedMessagesTimer.SetFunction 
     (&RoutingProtocol::SendQueuedMessages, this);
-  m_rmTimer.SetFunction
-    (&RoutingProtocol::RmTimerExpire, this);
   m_apTimer.SetFunction
     (&RoutingProtocol::APTimerExpire, this);
 
@@ -220,7 +223,7 @@ RoutingProtocol::DoInitialize ()
 
   bool canRunSdn = false;
   //Install RecvSDN  Only on CCH channel.
-  if(m_interfaceExclusions.find (m_CCHinterface) == m_interfaceExclusions.end ())
+  if (m_CCHAddress != Ipv4Address::GetZero ())
     {
       // Create a socket to listen only on this interface
       Ptr<Socket> socket = Socket::CreateSocket (GetObject<Node> (),
@@ -244,43 +247,39 @@ RoutingProtocol::DoInitialize ()
   if(canRunSdn)
     {
       HelloTimerExpire ();
-      RmTimerExpire ();
       APTimerExpire ();
-      NS_LOG_DEBUG ("SDN on node (Car) " << m_mainAddress << " started");
+      NS_LOG_DEBUG ("SDN on node (Car) " << m_CCHAddress << " started");
     }
 }
 
 void 
 RoutingProtocol::SetCCHInterface (uint32_t interface)
 {
-  //std::cout<<"SetCCHInterface "<<interface<<std::endl;
-  m_mainAddress = m_ipv4->GetAddress (interface, 0).GetLocal ();
   m_CCHinterface = interface;
+  m_CCHAddress = m_ipv4->GetAddress (m_CCHinterface, 0).GetLocal ();
   Ipv4InterfaceAddress temp_if_add = m_ipv4->GetAddress (m_CCHinterface, 0);
   AddEntry (temp_if_add.GetLocal (),
             Ipv4Address (temp_if_add.GetMask ().Get ()),
             temp_if_add.GetLocal (),
             m_CCHinterface);
-  //std::cout<<"SetCCHInterface "<<m_mainAddress.Get ()%256<<std::endl;
 }
 
 void 
 RoutingProtocol::SetSCHInterface (uint32_t interface)
 {
-  //std::cout<<"SetSCHInterface "<<interface<<std::endl;
   m_SCHinterface = interface;
+  m_SCHAddress = m_ipv4->GetAddress (m_SCHinterface, 0).GetLocal ();
   Ipv4InterfaceAddress temp_if_add = m_ipv4->GetAddress (m_SCHinterface, 0);
   AddEntry (temp_if_add.GetLocal (),
             Ipv4Address (temp_if_add.GetMask ().Get ()),
             temp_if_add.GetLocal (),
             m_SCHinterface);
-  //std::cout<<"SetSCHInterface "<<m_mainAddress.Get ()%256<<std::endl;
 }
 
 void
-RoutingProtocol::SetInterfaceExclusions (std::set<uint32_t> exceptions)
+RoutingProtocol::SetAlgo (Algo which)
 {
-  m_interfaceExclusions = exceptions;
+  m_algorithm = which;
 }
 
 //
@@ -288,8 +287,6 @@ RoutingProtocol::SetInterfaceExclusions (std::set<uint32_t> exceptions)
 void
 RoutingProtocol::RecvSDN (Ptr<Socket> socket)
 {
-  //if (m_mainAddress.Get () % 256 > 50)
-  //  std::cout<<"RecvSDN"<<m_mainAddress.Get () % 256<<std::endl;
   Ptr<Packet> receivedPacket;
   Address sourceAddress;
   receivedPacket = socket->RecvFrom (sourceAddress);
@@ -298,7 +295,7 @@ RoutingProtocol::RecvSDN (Ptr<Socket> socket)
   Ipv4Address senderIfaceAddr = inetSourceAddr.GetIpv4 ();
   Ipv4Address receiverIfaceAddr = m_socketAddresses[socket].GetLocal ();
   NS_ASSERT (receiverIfaceAddr != Ipv4Address ());
-  NS_LOG_DEBUG ("SDN node " << m_mainAddress
+  NS_LOG_DEBUG ("SDN node " << m_CCHAddress
                 << " received a SDN packet from "
                 << senderIfaceAddr << " to " << receiverIfaceAddr);
 
@@ -349,65 +346,55 @@ RoutingProtocol::RecvSDN (Ptr<Socket> socket)
 
       switch (messageHeader.GetMessageType ())
         {
-        case sdn::MessageHeader::ROUTING_MESSAGE:
-          NS_LOG_DEBUG (Simulator::Now ().GetSeconds ()
-                        << "s SDN node " << m_mainAddress
-                        << " received Routing message of size " 
-                        << messageHeader.GetSerializedSize ());
-          //Controller Node should discare Hello_Message
-          if (GetType() == CAR)
-            ProcessRm (messageHeader);
-          break;
+          case sdn::MessageHeader::HELLO_MESSAGE:
+            NS_LOG_DEBUG (Simulator::Now ().GetSeconds ()
+                          << "s SDN node " << m_CCHAddress
+                          << " received Routing message of size "
+                          << messageHeader.GetSerializedSize ());
+            //Car Node should discare Hello_Message
+            if (GetType() == LOCAL_CONTROLLER)
+              ProcessHM (messageHeader);
+            break;
 
-        case sdn::MessageHeader::HELLO_MESSAGE:
-          NS_LOG_DEBUG (Simulator::Now ().GetSeconds ()
-                        << "s SDN node " << m_mainAddress
-                        << " received Routing message of size "
-                        << messageHeader.GetSerializedSize ());
-          //Car Node should discare Hello_Message
-          if (GetType() == LOCAL_CONTROLLER)
-            ProcessHM (messageHeader);
-          break;
+          case sdn::MessageHeader::APPOINTMENT_MESSAGE:
+            NS_LOG_DEBUG (Simulator::Now ().GetSeconds ()
+                          << "s SDN node " << m_CCHAddress
+                          << " received Appointment message of size "
+                          << messageHeader.GetSerializedSize ());
+            if (GetType() == CAR)
+              ProcessAppointment (messageHeader);
+            break;
 
-        case sdn::MessageHeader::APPOINTMENT_MESSAGE:
-          NS_LOG_DEBUG (Simulator::Now ().GetSeconds ()
-                        << "s SDN node " << m_mainAddress
-                        << " received Appointment message of size "
-                        << messageHeader.GetSerializedSize ());
-          if (GetType() == CAR)
-            ProcessAppointment (messageHeader);
-          break;
+          case sdn::MessageHeader::ACKHELLO_MESSAGE:
+            NS_LOG_DEBUG (Simulator::Now ().GetSeconds ()
+                          << "s SDN node " << m_CCHAddress
+                          << " received ACKHELLO message of size "
+                          << messageHeader.GetSerializedSize ());
+            if (GetType() == CAR)
+              ProcessAckHello (messageHeader);
+            break;
 
-        case sdn::MessageHeader::ACKHELLO_MESSAGE:
-          NS_LOG_DEBUG (Simulator::Now ().GetSeconds ()
-                        << "s SDN node " << m_mainAddress
-                        << " received ACKHELLO message of size "
-                        << messageHeader.GetSerializedSize ());
-          if (GetType() == CAR)
-            ProcessAckHello (messageHeader);
-          break;
+          case sdn::MessageHeader::DONT_FORWARD:
+            NS_LOG_DEBUG (Simulator::Now ().GetSeconds ()
+                          << "s SDN node " << m_CCHAddress
+                          << " received DONT_FORWARD message of size "
+                          << messageHeader.GetSerializedSize ());
+            if (GetType() == CAR)
+              ProcessDontForward (messageHeader);
+            break;
 
-        case sdn::MessageHeader::DONT_FORWARD:
-          NS_LOG_DEBUG (Simulator::Now ().GetSeconds ()
-                        << "s SDN node " << m_mainAddress
-                        << " received DONT_FORWARD message of size "
-                        << messageHeader.GetSerializedSize ());
-          if (GetType() == CAR)
-            ProcessDontForward (messageHeader);
-          break;
-
-        case sdn::MessageHeader::LC2LC:
-          NS_LOG_DEBUG (Simulator::Now ().GetSeconds ()
-                        << "s SDN node " << m_mainAddress
-                        << " received LC2LC message of size "
-                        << messageHeader.GetSerializedSize ());
-          if (GetType() == LOCAL_CONTROLLER)
-            ProcessLc2Lc (messageHeader, senderIfaceAddr);
-          break;
-        default:
-          NS_LOG_DEBUG ("SDN message type " <<
-                        int (messageHeader.GetMessageType ()) <<
-                        " not implemented");
+          case sdn::MessageHeader::LC2LC:
+            NS_LOG_DEBUG (Simulator::Now ().GetSeconds ()
+                          << "s SDN node " << m_CCHAddress
+                          << " received LC2LC message of size "
+                          << messageHeader.GetSerializedSize ());
+            if (GetType() == LOCAL_CONTROLLER)
+              ProcessLc2Lc (messageHeader, senderIfaceAddr);
+            break;
+          default:
+            NS_LOG_DEBUG ("SDN message type " <<
+                          int (messageHeader.GetMessageType ()) <<
+                          " not implemented");
         }
 
     }
@@ -417,10 +404,6 @@ RoutingProtocol::RecvSDN (Ptr<Socket> socket)
 void
 RoutingProtocol::ProcessHM (const sdn::MessageHeader &msg)
 {
-  /*std::cout<<m_mainAddress.Get ()%256<<" RoutingProtocol::ProcessHM "
-      <<msg.GetHello ().ID.Get ()%256<<" Speed:"
-      <<msg.GetHello ().GetVelocity ().x<<std::endl;
-  */
   if (IsInMyArea (msg.GetHello ().GetPosition ()))
     {
       Ipv4Address ID = msg.GetHello ().ID;
@@ -435,6 +418,12 @@ RoutingProtocol::ProcessHM (const sdn::MessageHeader &msg)
           if (it->second.Velocity.x+it->second.Velocity.y+it->second.Velocity.z < 1)//To privent Dead Point
             {
               it->second.Velocity.z = 10;
+            }
+          if (it->second.appointmentResult == FORWARDER)
+            {
+              std::cout<<"miscalculation on FORWARDER Car:"<<Ipv4toString (ID)<<std::endl;
+              m_linkEstablished = false;
+              ComputeRoute ();
             }
         }
       else
@@ -456,38 +445,6 @@ RoutingProtocol::ProcessHM (const sdn::MessageHeader &msg)
   //std::cout<<"V:"<<m_lc_info[ID].Velocity.x<<std::endl;
 }
 
-// \brief Build routing table according to Rm
-void
-RoutingProtocol::ProcessRm (const sdn::MessageHeader &msg)
-{
-  NS_LOG_FUNCTION (msg);
-  
-  const sdn::MessageHeader::Rm &rm = msg.GetRm();
-  // Check if this rm is for me
-  // Ignore rm that ID does not match.
-  if (IsMyOwnAddress (rm.ID))
-    {
-      Time now = Simulator::Now();
-      NS_LOG_DEBUG ("@" << now.GetSeconds() << ":Node " << m_mainAddress
-                    << "ProcessRm.");
-
-      NS_ASSERT (rm.GetRoutingMessageSize() >= 0);
-
-      Clear();
-
-      for (std::vector<sdn::MessageHeader::Rm::Routing_Tuple>::const_iterator it = rm.routingTables.begin();
-            it != rm.routingTables.end();
-            ++it)
-      {
-
-        AddEntry(it->destAddress,
-                 it->mask,
-                 it->nextHop,
-                 0);
-      }
-    }
-}
-
 void
 RoutingProtocol::ProcessAppointment (const sdn::MessageHeader &msg)
 {
@@ -498,12 +455,8 @@ RoutingProtocol::ProcessAppointment (const sdn::MessageHeader &msg)
       switch (appointment.ATField)
       {
         case NORMAL:
-          std::cout<<"CAR:"<<Ipv4toString (m_mainAddress)<<"  ProcessAppointment";
-          std::cout<<" \"NORMAL\""<<std::endl;
           break;
         case FORWARDER:
-          std::cout<<"CAR:"<<Ipv4toString (m_mainAddress)<<"  ProcessAppointment";
-          std::cout<<" \"FORWARDER\""<<std::endl;
           break;
         default:
           std::cout<<"RoutingProtocol::ProcessAppointment->ERROR TYPE"<<std::endl;
@@ -523,8 +476,19 @@ RoutingProtocol::ProcessAckHello (const sdn::MessageHeader &msg)
       m_car_lc_ack_vel = ackhello.GetVelocity ();
       m_car_lc_ack_time = Simulator::Now ();
       m_car_lc_ack_vaild = true;
-      m_lc_start = ackhello.GetControllArea_Start ();
-      m_lc_end = ackhello.GetControllArea_End ();
+      Vector2D new_start = ackhello.GetControllArea_Start ();
+      Vector2D new_end = ackhello.GetControllArea_End ();
+      if (m_lc_controllArea_vaild)
+        {
+          if ((m_lc_start.x != new_start.x)||(m_lc_start.y != new_start.y)||
+              (m_lc_end.x != new_end.x)||(m_lc_end.y != new_end.y)) //Come to an new area~
+            {
+              std::cout<<"NEWAREA"<<Ipv4toString (ackhello.ID)<<std::endl;
+              m_appointmentResult = NORMAL;
+            }
+        }
+      m_lc_start = new_start;
+      m_lc_end = new_end;
       /*std::cout<<Ipv4toString (ackhello.ID)<<",ACK "
                <<m_lc_start.x<<","<<m_lc_start.y<<";"
                <<m_lc_end.x<<","<<m_lc_end.y<<std::endl;*/
@@ -541,7 +505,7 @@ RoutingProtocol::ProcessDontForward (const sdn::MessageHeader &msg)
   if (IsMyOwnAddress (dontforward.ID))
     {
       Time now = Simulator::Now();
-      NS_LOG_DEBUG ("@" << now.GetSeconds() << ":Node " << m_mainAddress
+      NS_LOG_DEBUG ("@" << now.GetSeconds() << ":Node " << m_CCHAddress
                     << "ProcessDontForward.");
 
       NS_ASSERT (dontforward.list_size >= 0);
@@ -565,7 +529,7 @@ RoutingProtocol::ProcessLc2Lc (const sdn::MessageHeader &msg, const Ipv4Address 
     {
       //std::cout<<"lc2lc.ID == sour!lc2lc.ID == sour!"<<std::endl;
       Time now = Simulator::Now();
-      NS_LOG_DEBUG ("@" << now.GetSeconds() << ":Node " << m_mainAddress
+      NS_LOG_DEBUG ("@" << now.GetSeconds() << ":Node " << m_CCHAddress
                     << "ProcessLc2Lc.");
 
       NS_ASSERT (lc2lc.list_size >= 0);
@@ -574,16 +538,49 @@ RoutingProtocol::ProcessLc2Lc (const sdn::MessageHeader &msg, const Ipv4Address 
         {
           m_lc_headNtail[lc2lc.ID].clear ();
         }
+
+      std::set<Ipv4Address> forward_chain_set;
+      for (std::list<Ipv4Address>::const_iterator cit = m_forward_chain.begin ();
+           cit != m_forward_chain.end (); ++cit)
+        {
+          forward_chain_set.insert (*cit);
+        }
+
+      bool reCompute = false;
       for (std::vector<Ipv4Address>::const_iterator cit = lc2lc.list.begin ();
            cit != lc2lc.list.end (); ++cit)
         {
-          m_lc_headNtail[lc2lc.ID].insert (*cit);
+          if ((m_linkEstablished)&&(forward_chain_set.find (*cit)!=forward_chain_set.end ()))
+            {
+              m_linkEstablished = false;
+              reCompute = true;
+            }
+          if (m_lc_info.find (*cit) != m_lc_info.end ())
+            {
+              m_lc_info.erase (*cit);
+            }
+          m_lc_headNtail[lc2lc.ID].push_back (*cit);
         }
+
+      if (m_linkEstablished)
+        {
+          for (std::list<Ipv4Address>::const_iterator cit = m_forward_chain.begin ();
+               cit != m_forward_chain.end (); ++cit)
+            {
+              CalcDontForward (*cit);
+              SendDontForward (*cit);
+            }
+        }
+      if (reCompute)
+        {
+          ComputeRoute ();
+        }
+
     }
 }
 
 void
-RoutingProtocol::Clear()
+RoutingProtocol::Clear_m_table ()
 {
   NS_LOG_FUNCTION_NOARGS();
   m_table.clear();
@@ -595,7 +592,7 @@ RoutingProtocol::AddEntry (const Ipv4Address &dest,
                            const Ipv4Address &next,
                            uint32_t interface)
 {
-  NS_LOG_FUNCTION(this << dest << next << interface << mask << m_mainAddress);
+  NS_LOG_FUNCTION(this << dest << next << interface << mask << m_CCHAddress);
   RoutingTableEntry RTE;
   RTE.destAddr = dest;
   RTE.mask = mask;
@@ -610,7 +607,7 @@ RoutingProtocol::AddEntry (const Ipv4Address &dest,
                            const Ipv4Address &next,
                            const Ipv4Address &interfaceAddress)
 {
-  NS_LOG_FUNCTION(this << dest << next << interfaceAddress << mask << m_mainAddress);
+  NS_LOG_FUNCTION(this << dest << next << interfaceAddress << mask << m_CCHAddress);
 
   NS_ASSERT (m_ipv4);
 
@@ -686,9 +683,6 @@ RoutingProtocol::RouteInput(Ptr<const Packet> p,
                             ErrorCallback ecb)
 {
   NS_LOG_FUNCTION (this << " " << m_ipv4->GetObject<Node> ()->GetId () << " " << header.GetDestination ());
-  //TODO
-  //std::cout<<m_mainAddress.Get ()%256<<" "<<header.GetDestination ().Get () %256<<std::endl;
-  //bool lcb_status = false;
   Ipv4Address dest = header.GetDestination();
   Ipv4Address sour = header.GetSource();
 
@@ -713,11 +707,6 @@ RoutingProtocol::RouteInput(Ptr<const Packet> p,
         {
           NS_LOG_LOGIC ("Broadcast local delivery to " << dest);
           lcb (p, header, iif);
-          /*if ((m_mainAddress.Get ()%256 == 53)&&(iif=m_SCHinterface))
-            {
-              std::cout<<m_mainAddress.Get ()%256<<" "<<header.GetDestination ().Get () %256<<std::endl;
-              std::cout<<"YES!"<<std::endl;
-            }*/
         }
       else
         {
@@ -728,7 +717,7 @@ RoutingProtocol::RouteInput(Ptr<const Packet> p,
 
       if ((m_appointmentResult == FORWARDER)&&(!IsInMyArea (m_mobility->GetPosition ()))&&(m_lc_controllArea_vaild))
         {
-          std::cout<<"!IsInMyArea"<<Ipv4toString (m_mainAddress)
+          std::cout<<"!IsInMyArea"<<Ipv4toString (m_CCHAddress)
                    <<",Pos:"<<m_mobility->GetPosition ().x<<","<<m_mobility->GetPosition ().y
                    <<","<<m_mobility->GetPosition ().z<<" Start:"<<m_lc_start.x<<","
                    <<m_lc_start.y<<";End:"<<m_lc_end.x<<","<<m_lc_end.y<<std::endl;
@@ -744,7 +733,7 @@ RoutingProtocol::RouteInput(Ptr<const Packet> p,
           broadcastRoute->SetGateway (dest);//broadcast
           broadcastRoute->SetOutputDevice (m_ipv4->GetNetDevice (m_SCHinterface));
           Ipv4Header ipHeader = header;
-          ipHeader.SetSource (m_ipv4->GetAddress (m_SCHinterface,0).GetLocal ()); //To Prevent Brocast Storm, m_mainAddress is for CCH.
+          ipHeader.SetSource (m_SCHAddress); //To Prevent Brocast Storm, m_CCHAddress is for CCH.
           ipHeader.SetTtl (ipHeader.GetTtl () - 1);
           if (ipHeader.GetTtl ()!=0)
             {
@@ -788,8 +777,6 @@ RoutingProtocol::RouteOutput (Ptr<Packet> p,
   NS_LOG_FUNCTION (this << " " << m_ipv4->GetObject<Node> ()->GetId () << " " << header.GetDestination () << " " << oif);
   Ptr<Ipv4Route> rtentry;
   RoutingTableEntry entry;
-  //std::cout<<"RouteOutput "<<m_mainAddress.Get ()%256 << ",Dest:"<<header.GetDestination ().Get ()%256<<std::endl;
-  //std::cout<<"M_TABLE SIZE "<<m_table.size ()<<std::endl;
   if (Lookup (header.GetDestination (), entry))
     {
       //std::cout<<"found!"<<std::endl;
@@ -799,7 +786,7 @@ RoutingProtocol::RouteOutput (Ptr<Packet> p,
           // We do not attempt to perform a constrained routing searchTx_Data_Pkts
           // if the caller specifies the oif; we just enforce that
           // that the found route matches the requested outbound interface
-          NS_LOG_DEBUG ("SDN node " << m_mainAddress
+          NS_LOG_DEBUG ("SDN node " << m_CCHAddress
                                      << ": RouteOutput for dest=" << header.GetDestination ()
                                      << " Route interface " << interfaceIdx
                                      << " does not match requested output interface "
@@ -826,7 +813,7 @@ RoutingProtocol::RouteOutput (Ptr<Packet> p,
       rtentry->SetGateway (entry.nextHop);
       rtentry->SetOutputDevice (m_ipv4->GetNetDevice (interfaceIdx));
       sockerr = Socket::ERROR_NOTERROR;
-      NS_LOG_DEBUG ("SDN node " << m_mainAddress
+      NS_LOG_DEBUG ("SDN node " << m_CCHAddress
                                  << ": RouteOutput for dest=" << header.GetDestination ()
                                  << " --> nextHop=" << entry.nextHop
                                  << " interface=" << entry.interface);
@@ -834,33 +821,13 @@ RoutingProtocol::RouteOutput (Ptr<Packet> p,
     }
   else
     {
-      NS_LOG_DEBUG ("SDN node " << m_mainAddress
+      NS_LOG_DEBUG ("SDN node " << m_CCHAddress
                                  << ": RouteOutput for dest=" << header.GetDestination ()
                                  << " No route to host");
       sockerr = Socket::ERROR_NOROUTETOHOST;
       std::cout<<"RoutingProtocol::RouteOutput->No route to host"<<std::endl;
     }
   return rtentry;
-}
-
-void
-RoutingProtocol::Dump ()
-{
-#ifdef NS3_LOG_ENABLE
-  NS_LOG_DEBUG ("Dumpping For" << m_mainAddress);
-#endif //NS3_LOG_ENABLE
-}
-
-std::vector<RoutingTableEntry>
-RoutingProtocol::GetRoutingTableEntries () const
-{
-  std::vector<RoutingTableEntry> rtvt;
-  for (std::map<Ipv4Address, RoutingTableEntry>::const_iterator it = m_table.begin ();
-       it != m_table.end (); ++it)
-    {
-      rtvt.push_back (it->second);
-    }
-  return rtvt;
 }
 
 int64_t
@@ -898,12 +865,6 @@ RoutingProtocol::HelloTimerExpire ()
 }
 
 void
-RoutingProtocol::RmTimerExpire ()
-{
-  //Do nothing.
-}
-
-void
 RoutingProtocol::APTimerExpire ()
 {
   if (GetType() == LOCAL_CONTROLLER)
@@ -918,10 +879,10 @@ void
 RoutingProtocol::SendPacket (Ptr<Packet> packet,
                              const MessageList &containedMessages)
 {
-  NS_LOG_DEBUG ("SDN node " << m_mainAddress << " sending a SDN packet");
+  NS_LOG_DEBUG ("SDN node " << m_CCHAddress << " sending a SDN packet");
   // Add a header
   sdn::PacketHeader header;
-  header.originator = this->m_mainAddress;//CCH Address
+  header.originator = m_CCHAddress;//CCH Address
   header.SetPacketLength (header.GetSerializedSize () + packet->GetSize ());
   header.SetPacketSequenceNumber (GetPacketSequenceNumber ());
   packet->AddHeader (header);
@@ -959,8 +920,7 @@ RoutingProtocol::SendQueuedMessages ()
   Ptr<Packet> packet = Create<Packet> ();
   int numMessages = 0;
 
-  NS_LOG_DEBUG ("SDN node " << m_mainAddress << ": SendQueuedMessages");
-  //std::cout<<"SendQueuedMessages  "<<m_mainAddress.Get ()%256 <<std::endl;
+  NS_LOG_DEBUG ("SDN node " << m_CCHAddress << ": SendQueuedMessages");
   MessageList msglist;
 
   for (std::vector<sdn::MessageHeader>::const_iterator message = m_queuedMessages.begin ();
@@ -1001,7 +961,7 @@ RoutingProtocol::IsMyOwnAddress (const Ipv4Address & a) const
           return true;
         }
     }
-  if (a == m_ipv4->GetAddress (m_SCHinterface,0).GetLocal ())
+  if (a == m_SCHAddress)
     {
       return true;
     }
@@ -1020,7 +980,7 @@ RoutingProtocol::SendHello ()
   msg.SetMessageType (sdn::MessageHeader::HELLO_MESSAGE);
 
   sdn::MessageHeader::Hello &hello = msg.GetHello ();
-  hello.ID = m_ipv4->GetAddress (m_SCHinterface,0).GetLocal ();
+  hello.ID = m_SCHAddress;
   Vector pos = m_mobility->GetPosition ();
   Vector vel = m_mobility->GetVelocity ();
   hello.SetPosition (pos.x, pos.y, pos.z);
@@ -1029,36 +989,6 @@ RoutingProtocol::SendHello ()
   NS_LOG_DEBUG ( "SDN HELLO_MESSAGE sent by node: " << hello.ID
                  << "   at " << now.GetSeconds() << "s");
   QueueMessage (msg, JITTER);
-}
-
-void
-RoutingProtocol::SendRoutingMessage ()
-{
-  NS_LOG_FUNCTION (this);
-
-  for (std::map<Ipv4Address, CarInfo>::const_iterator cit = m_lc_info.begin ();
-       cit != m_lc_info.end (); ++cit)
-    {
-      sdn::MessageHeader msg;
-      Time now = Simulator::Now ();
-      msg.SetVTime (m_helloInterval);
-      msg.SetTimeToLive (41993);//Just MY Birthday.
-      msg.SetMessageSequenceNumber (GetMessageSequenceNumber ());
-      msg.SetMessageType (sdn::MessageHeader::ROUTING_MESSAGE);
-      sdn::MessageHeader::Rm &rm = msg.GetRm ();
-      rm.ID = cit->first;
-      sdn::MessageHeader::Rm::Routing_Tuple rt;
-      for (std::vector<RoutingTableEntry>::const_iterator cit2 = cit->second.R_Table.begin ();
-           cit2 != cit->second.R_Table.end (); ++cit2)
-        {
-          rt.destAddress = cit2->destAddr;
-          rt.mask = cit2->mask;
-          rt.nextHop = cit2->nextHop;
-          rm.routingTables.push_back (rt);
-        }
-      rm.routingMessageSize = rm.routingTables.size ();
-      QueueMessage (msg, JITTER);
-    }
 }
 
 void
@@ -1138,10 +1068,16 @@ RoutingProtocol::SendLc2Lc ()
   msg.SetMessageSequenceNumber (GetMessageSequenceNumber ());
   msg.SetMessageType (sdn::MessageHeader::LC2LC);
   sdn::MessageHeader::Lc2Lc &lc2lc = msg.GetLc2Lc ();
-  lc2lc.ID = m_mainAddress;//CCH Address.
+  lc2lc.ID = m_CCHAddress;//CCH Address.
 
-  lc2lc.list.push_back (m_forward_chain.front ());
-  lc2lc.list.push_back (m_forward_chain.back ());
+  for (std::list<Ipv4Address>::const_iterator cit = m_forward_chain.begin ();
+       cit != m_forward_chain.end (); ++cit)
+    {
+      lc2lc.list.push_back (*cit);
+    }
+
+  //lc2lc.list.push_back (m_forward_chain.front ());
+  //lc2lc.list.push_back (m_forward_chain.back ());
 
   lc2lc.list_size = lc2lc.list.size ();
   QueueMessage (msg, JITTER);
@@ -1168,50 +1104,300 @@ RoutingProtocol::GetType () const
 void
 RoutingProtocol::ComputeRoute ()
 {
-  //std::cout<<"RemoveTimeOut"<<std::endl;
-  RemoveTimeOut (); //Remove Stale Tuple
+  RemoveLeaved (); //Remove Stale Tuple
 
-  if (1)//(!m_linkEstablished)
+  if (m_algorithm == Yangs_Algo)
     {
-      //std::cout<<"Do_Init_Compute"<<std::endl;
-      Do_Init_Compute ();
+      if (!m_linkEstablished)
+        {
+          std::cout<<"Do_Init_Compute"<<std::endl;
+          Do_Init_Compute ();
+        }
+      else
+        {
+          std::cout<<"Do_Update"<<std::endl;
+          Do_Update ();
+        }
+      if (m_linkEstablished)
+        {
+          SendLc2Lc ();
+          std::cout<<Ipv4toString (m_CCHAddress)<<" SendLC2LC"<<std::endl;
+          std::cout<<"CHAIN:"<<std::endl;
+          for (std::list<Ipv4Address>::const_iterator cit = m_forward_chain.begin ();
+               cit != m_forward_chain.end (); ++cit)
+            {
+              std::cout<<Ipv4toString((*cit))<<"("<<CalcDist (m_lc_info[*cit].GetPos (),m_lc_start)<<"),"<<std::endl;
+              CalcDontForward (*cit);
+              SendDontForward (*cit);
+            }
+          std::cout<<"SendAppointment"<<std::endl;
+          SendAppointment ();
+        }
+      Reschedule ();
     }
   else
     {
-      //std::cout<<"Do_Update"<<std::endl;
-      Do_Update ();
-    }
-
-  if (m_linkEstablished)
-    {
-      //std::cout<<"SendAppointment"<<std::endl;
-      SendAppointment ();
-      std::cout<<"CHAIN:"<<std::endl;
-      for (std::list<Ipv4Address>::const_iterator cit = m_forward_chain.begin ();
-           cit != m_forward_chain.end (); ++cit)
+      std::cout<<"BinarySearch"<<std::endl;
+      BinarySearch ();
+      if (m_linkEstablished)
         {
-          std::cout<<Ipv4toString((*cit))<<"("<<CalcDist (m_lc_info[*cit].GetPos (),m_lc_start)<<"),"<<std::endl;
-          CalcDontForward (*cit);
-          SendDontForward (*cit);
+          std::cout<<Ipv4toString (m_CCHAddress)<<"SendLC2LC"<<std::endl;
+          SendLc2Lc ();
+          std::cout<<"CHAIN:"<<std::endl;
+          for (std::list<Ipv4Address>::const_iterator cit = m_forward_chain.begin ();
+               cit != m_forward_chain.end (); ++cit)
+            {
+              std::cout<<Ipv4toString((*cit))<<"("<<CalcDist (m_lc_info[*cit].GetPos (),m_lc_start)<<"),"<<std::endl;
+              CalcDontForward (*cit);
+              SendDontForward (*cit);
+            }
+          SendAppointment ();
+          std::cout<<"SendAppointment"<<std::endl;
         }
-      //std::cout<<"SendLC2LC"<<std::endl;
-      SendLc2Lc ();
+      BSReschedule ();
     }
-  //std::cout<<"Reschedule"<<std::endl;
-  Reschedule ();
   std::cout<<"CR DONE"<<std::endl;
 }//RoutingProtocol::ComputeRoute
 
 void
+RoutingProtocol::BinarySearch ()
+{
+  SortByDistance ();//LC_END->LC_START
+  double LowerBound = 0;
+  double UpperBound = FindUpperBound ();
+  std::cout<<"Upper:"<<UpperBound<<std::endl;
+  uint32_t BS_count = 0;
+  while (UpperBound - LowerBound > 0.5)
+    {
+      double mid = (UpperBound + LowerBound)/2;
+      ++BS_count;
+      if (TestResult (mid))
+        {
+          LowerBound = mid;
+        }
+      else
+        {
+          UpperBound = mid;
+        }
+    }
+
+  ++BS_count;
+  std::cout<<"BS_count:"<<BS_count<<",LowerBound:"<<LowerBound<<std::endl;
+
+  //SetForwardChain
+  if (TestResult (LowerBound))//Double Check and Set m_linkEstablished/m_lc_info
+    {
+      if (LowerBound > 1)
+        {
+          m_linkEstablished = true;
+          //build chain
+          double const LengthOfFirstArea = 0.5 * m_signal_range;
+          Ipv4Address The_Car,
+                      ZERO = Ipv4Address::GetZero ();
+          double minhop = INFHOP;
+          int pos = m_bs_sort.size () - 1;
+          while (pos>=0)
+            {
+              if (m_bs_sort[pos].second > LengthOfFirstArea)
+                {
+                  break;
+                }
+              if (m_lc_info[m_bs_sort[pos].first].minhop < minhop)
+                {
+                  minhop = m_lc_info[m_bs_sort[pos].first].minhop;
+                  The_Car = m_bs_sort[pos].first;
+                }
+              --pos;
+            }
+          m_theFirstCar = The_Car;
+          m_forward_chain.clear ();
+          ResetAppointmentResult ();
+          while (The_Car != ZERO)
+            {
+              m_forward_chain.push_back (The_Car);
+              m_lc_info[The_Car].appointmentResult = FORWARDER;
+              The_Car = m_lc_info[The_Car].ID_of_minhop;
+            }
+
+          m_lowerbound = LowerBound;
+        }
+      else
+        m_linkEstablished = false;
+    }
+  else
+    {
+      m_linkEstablished = false;
+    }
+}
+
+bool
+RoutingProtocol::TestResult (double result)
+{
+  //INIT
+  bool flag = true;
+  double const LengthOfLastArea = 0.5 * m_signal_range;
+  for (std::vector<std::pair<Ipv4Address, double> >::const_iterator cit = m_bs_sort.begin ();
+       cit != m_bs_sort.end (); ++cit)
+    {
+      if (flag)
+        {
+          double const d = (m_road_length - cit->second);
+          if (d < LengthOfLastArea)
+            {
+              double const v = GetProjection (m_lc_info[cit->first].Velocity);
+              m_lc_info[cit->first].ID_of_minhop = Ipv4Address::GetZero ();
+              if ((v * result + cit->second)<m_road_length)
+                m_lc_info[cit->first].minhop = 1;
+              else
+                m_lc_info[cit->first].minhop = INFHOP;
+            }
+          else
+            {
+              flag = false;
+              m_lc_info[cit->first].ID_of_minhop = Ipv4Address::GetZero ();
+              m_lc_info[cit->first].minhop = INFHOP;
+            }
+        }
+      else
+        {
+          m_lc_info[cit->first].ID_of_minhop = Ipv4Address::GetZero ();
+          m_lc_info[cit->first].minhop = INFHOP;
+        }
+    }
+
+
+  //DP
+  for (uint32_t i = 0; i<m_bs_sort.size () ;++i)
+    {
+      //std::cout<<Ipv4toString (m_bs_sort[i].first)<<","<<m_bs_sort[i].second<<std::endl;
+      if ((m_road_length - m_bs_sort[i].second) >= LengthOfLastArea)
+        {
+          for (int j = i - 1; j >= 0; --j)
+            {
+              if (m_bs_sort[j].second - m_bs_sort[i].second > m_road_length * m_safety_raito)
+                {
+                  break;
+                }
+              double const vi = GetProjection (m_lc_info[m_bs_sort[i].first].Velocity);
+              double const vj = GetProjection (m_lc_info[m_bs_sort[j].first].Velocity);
+              double const ppi = (vi * result + m_bs_sort[i].second);
+              bool const b4ileft = ppi < m_road_length;
+              double const ppj = (vj * result + m_bs_sort[j].second);
+              bool const b4jleft = ppj < m_road_length;
+              bool const b4ijlost = dabs (ppi - ppj) < m_signal_range * m_safety_raito;
+              if (b4ileft && b4jleft && b4ijlost)
+                {
+                  if (m_lc_info[m_bs_sort[i].first].minhop >  m_lc_info[m_bs_sort[j].first].minhop + 1)
+                    {
+                      m_lc_info[m_bs_sort[i].first].minhop = m_lc_info[m_bs_sort[j].first].minhop + 1;
+                      m_lc_info[m_bs_sort[i].first].ID_of_minhop = m_bs_sort[j].first;
+                    }
+                }
+            }
+        }
+    }
+
+  //Check the first Area
+  bool ret = false;
+  for (int i = m_bs_sort.size()-1; i>=0; --i)
+    {
+      if (m_bs_sort[i].second < 0.5*m_signal_range)
+        {
+          if (m_lc_info[m_bs_sort[i].first].minhop != INFHOP)
+            {
+              ret = true;
+              break;
+            }
+        }
+      else
+        {
+          break;
+        }
+    }
+  return ret;
+}
+
+
+double
+RoutingProtocol::FindUpperBound ()
+{
+  double ret = 0;
+  double const LengthOfFirstArea = 0.5 * m_signal_range;
+  for (std::vector<std::pair<Ipv4Address, double> > ::const_reverse_iterator crit = m_bs_sort.rbegin ();
+       crit != m_bs_sort.rend (); ++crit)
+    {
+      double const v = GetProjection (m_lc_info[crit->first].Velocity);
+      double const d = crit->second;
+      if (d>LengthOfFirstArea)
+        break;
+      double t2l = (LengthOfFirstArea - d) / v;
+      if (t2l > ret)
+        ret = t2l;
+    }
+  return ret;
+}
+
+void
+RoutingProtocol::SortByDistance ()
+{
+  m_bs_sort.clear ();
+
+  std::list<std::pair<double, Ipv4Address> > templist;
+
+  for (std::map<Ipv4Address, CarInfo>::const_iterator cit = m_lc_info.begin ();
+      cit != m_lc_info.end (); ++cit)
+    {
+
+      Vector3D temp3D = cit->second.GetPos ();
+      double distance = CalculateDistance (Vector2D(temp3D.x, temp3D.y), m_lc_start);
+
+      templist.push_back (std::pair<double, Ipv4Address>(distance, cit->first));
+    }
+
+  templist.sort (RoutingProtocol::Comp);
+
+  for (std::list<std::pair<double, Ipv4Address> >::const_iterator cit = templist.begin ();
+       cit != templist.end (); ++cit)
+    {
+      //std::cout<<cit->second.Get () % 256<<":"<<cit->first<<std::endl;
+      m_bs_sort.push_back (std::pair<Ipv4Address, double>(cit->second, cit->first));
+    }
+}
+
+void
+RoutingProtocol::BSReschedule ()
+{
+  if (!m_linkEstablished)
+    {
+      if (m_apTimer.IsRunning ())
+        {
+          m_apTimer.Remove ();
+        }
+      m_apTimer.Schedule (m_minAPInterval);
+      //std::cout<<"Reschedule:"<<m_minAPInterval.GetSeconds ()<<"s."<<std::endl;
+    }
+  else
+    {
+      if (m_apTimer.IsRunning ())
+        {
+          m_apTimer.Remove ();
+        }
+      m_apTimer.Schedule (Seconds (m_lowerbound));
+    }
+}
+
+
+
+void
 RoutingProtocol::Do_Init_Compute ()
 {
-  //std::cout<<"Partition"<<std::endl;
+  std::cout<<"Partition"<<std::endl;
   Partition ();
 
-  //std::cout<<"SetN_Init"<<std::endl;
+  std::cout<<"SetN_Init"<<std::endl;
   SetN_Init ();
 
-  //std::cout<<"OtherSet_Init"<<std::endl;
+  std::cout<<"OtherSet_Init"<<std::endl;
   OtherSet_Init ();
 
   /*std::cout<<"Next:";
@@ -1222,24 +1408,24 @@ RoutingProtocol::Do_Init_Compute ()
     }
   std::cout<<std::endl;
 */
-  //std::cout<<"SelectNode"<<std::endl;
+  std::cout<<"SelectNode"<<std::endl;
   SelectNode ();
-  //std::cout<<"Do_Init_Compute DONE"<<std::endl;
+  std::cout<<"Do_Init_Compute DONE"<<std::endl;
 }
 
 void
 RoutingProtocol::Do_Update ()
 {
-  //std::cout<<"Partition"<<std::endl;
+  std::cout<<"Partition"<<std::endl;
   Partition ();
-  //std::cout<<"CalcSetZero"<<std::endl;
+  std::cout<<"CalcSetZero"<<std::endl;
   CalcSetZero ();
-  //std::cout<<"SelectNewNodeInAreaZero"<<std::endl;
+  std::cout<<"SelectNewNodeInAreaZero"<<std::endl;
   SelectNewNodeInAreaZero ();
-  //std::cout<<"Do_Update DONE"<<std::endl;
+  std::cout<<"Do_Update DONE"<<std::endl;
   if (!m_linkEstablished)
     {
-      //std::cout<<"!m_linkEstablished"<<std::endl;
+      std::cout<<"!m_linkEstablished"<<std::endl;
       Do_Init_Compute ();
     }
 }
@@ -1449,19 +1635,21 @@ RoutingProtocol::SelectNode ()
         }*/
     }
   //std::cout<<std::endl;
-
-  double vx = GetProjection (m_lc_info[m_theFirstCar].Velocity);
-  double dx = CalcDist (m_lc_info[m_theFirstCar].GetPos (), m_lc_start);
-  double t2l;
-  if (vx < 1e-7)
+  if (m_theFirstCar != Ipv4Address::GetZero ())
     {
-      m_linkEstablished = false;
-    }
-  else
-    {
-      t2l= (0.5 * m_signal_range - dx) / vx;
-      if (t2l<1)
-        m_linkEstablished = false;
+      double vx = GetProjection (m_lc_info[m_theFirstCar].Velocity);
+      double dx = CalcDist (m_lc_info[m_theFirstCar].GetPos (), m_lc_start);
+      double t2l;
+      if (vx < 1e-7)
+        {
+          m_linkEstablished = false;
+        }
+      else
+        {
+          t2l= (0.5 * m_signal_range - dx) / vx;
+          if (t2l<1)
+            m_linkEstablished = false;
+        }
     }
 
 
@@ -1492,6 +1680,7 @@ RoutingProtocol::CalcSetZero ()
 void
 RoutingProtocol::SelectNewNodeInAreaZero ()
 {
+  //std::cout<<"BP1"<<std::endl;
   uint32_t thezero = 0;
   Ipv4Address The_Car (thezero);
   uint32_t minhop_of_tc = INFHOP;
@@ -1517,7 +1706,7 @@ RoutingProtocol::SelectNewNodeInAreaZero ()
               }
           }
     }
-
+  //std::cout<<"BP2"<<std::endl;
   if (The_Car != Ipv4Address::GetZero ())//! NO CAR IN AREA 0 HAVE a link to area 1
     {
       if (m_lc_info[The_Car].ID_of_minhop == m_theFirstCar)
@@ -1536,8 +1725,10 @@ RoutingProtocol::SelectNewNodeInAreaZero ()
           m_theFirstCar = The_Car;
           //std::cout<<GetNumArea();
           //std::cout<<"Chain ";
+          //std::cout<<"BP3"<<std::endl;
           while (m_lc_info.find (The_Car) != m_lc_info.end ())
             {
+              //std::cout<<Ipv4toString (The_Car)<<std::endl;
               m_forward_chain.push_back (The_Car);
               //double oldp = CalcDist (m_lc_info[The_Car].GetPos (), m_lc_start);
               //std::cout<<The_Car.Get () % 256<<"("<<oldp<<","<<m_lc_info[The_Car].minhop<<")";
@@ -1555,7 +1746,7 @@ RoutingProtocol::SelectNewNodeInAreaZero ()
             }
           //std::cout<<std::endl;
         }
-
+      //std::cout<<"BP4"<<std::endl;
       //Time to short?
       double vx = GetProjection (m_lc_info[m_theFirstCar].Velocity);
       double dx = CalcDist (m_lc_info[m_theFirstCar].GetPos (), m_lc_start);
@@ -1605,6 +1796,10 @@ RoutingProtocol::Reschedule ()
         {
           t2l = m_minAPInterval.GetSeconds ();
         }
+      if (m_apTimer.IsRunning ())
+        {
+          m_apTimer.Remove ();
+        }
       m_apTimer.Schedule(Seconds(t2l));
       //std::cout<<"Reschedule:"<<t2l<<"s."<<"p:"<<dx<<",v:"<<vx<<std::endl;
     }
@@ -1633,7 +1828,7 @@ RoutingProtocol::GetShortHop(const Ipv4Address& IDa, const Ipv4Address& IDb)
       temp = (m_road_length - da) / va;
     }
   double const t2bl = temp;
-  if ((db - da < safe_range) && (abs((db + vb*t2bl)-(da + va*t2bl)) < safe_range))
+  if ((db - da < safe_range) && (dabs((db + vb*t2bl)-(da + va*t2bl)) < safe_range))
     {
       ShortHop sh;
       sh.nextID = IDb;
@@ -1672,8 +1867,8 @@ RoutingProtocol::GetShortHop(const Ipv4Address& IDa, const Ipv4Address& IDb)
           double const t2blmt = t2bl - sh.t;
           if ((tda<tdc)&&(tdc<tdb)&&(tdc-tda<safe_range)&&(tdb-tdc<safe_range))
             {
-              if ((abs((tdb + vb*t2blmt)-(tdc + vc*t2blmt)) < safe_range)&&
-                  (abs((tdc + vc*t2blmt)-(tda + va*t2blmt)) < safe_range))
+              if ((dabs((tdb + vb*t2blmt)-(tdc + vc*t2blmt)) < safe_range)&&
+                  (dabs((tdc + vc*t2blmt)-(tda + va*t2blmt)) < safe_range))
                 {
                   sh.IDa = IDa;
                   sh.IDb = IDb;
@@ -1685,29 +1880,6 @@ RoutingProtocol::GetShortHop(const Ipv4Address& IDa, const Ipv4Address& IDb)
         }//for (std::map<I ...
       return sh;
     }//else
-}
-
-void
-RoutingProtocol::LCAddEntry(const Ipv4Address& ID,
-                            const Ipv4Address& dest,
-                            const Ipv4Address& mask,
-                            const Ipv4Address& next)
-{
-  CarInfo& Entry = m_lc_info[ID];
-  RoutingTableEntry RTE;
-  RTE.destAddr = dest;
-  RTE.mask = mask;
-  RTE.nextHop = next;
-  Entry.R_Table.push_back (RTE);
-}
-
-void
-RoutingProtocol::ClearAllTables ()
-{
-  for (std::map<Ipv4Address, CarInfo>::iterator it = m_lc_info.begin (); it!=m_lc_info.end(); ++it)
-    {
-      it->second.R_Table.clear ();
-    }
 }
 
 int
@@ -1804,7 +1976,7 @@ RoutingProtocol::isPaddingExist () const
 }
 
 void
-RoutingProtocol::RemoveTimeOut()
+RoutingProtocol::RemoveLeaved()
 {
   Time now = Simulator::Now ();
   std::map<Ipv4Address, CarInfo>::iterator it = m_lc_info.begin ();
@@ -1841,7 +2013,7 @@ RoutingProtocol::SetControllArea (Vector2D start, Vector2D end)
 }
 
 bool
-RoutingProtocol::ShouldISendHello () const
+RoutingProtocol::ShouldISendHello ()
 {
   //return true;
 
@@ -1859,15 +2031,33 @@ RoutingProtocol::ShouldISendHello () const
                                   m_car_lc_ack_pos.z + m_car_lc_ack_vel.z * delta_t);
   Vector3D now_pos = m_mobility->GetPosition ();
   double distance = CalculateDistance (pridict_pos, now_pos);
+  //double nowspeed = GetProjection (m_mobility->GetVelocity ());
+  //double oldspeed = GetProjection (m_car_lc_ack_vel);
+  bool ret = false;
 
-  if (distance > ((1-m_safety_raito)/2) * m_signal_range)
+  if ((distance > ((1-m_safety_raito)/2) * m_signal_range))//||(dabs (nowspeed-oldspeed) / oldspeed > (1-m_safety_raito)))
     {
+      m_car_lc_ack_vaild = false;
       //std::cout<<"DIS,YES!"<<distance<<" "<<std::endl;
-      return true;
+      ret = true;
     }
 
-  //std::cout<<"return FALSE"<<std::endl;
-  return false;
+  if (!IsInMyArea (now_pos))
+    {
+      if (m_appointmentResult == FORWARDER)
+        {
+          //std::cout<<"FORWARDER--------------BUSTED!"<<std::endl;
+        }
+      else
+        {
+          //std::cout<<"NORMAL BUSTED!"<<std::endl;
+        }
+      m_lc_controllArea_vaild = false;
+      m_appointmentResult = NORMAL;
+      ret = true;
+    }
+
+  return ret;
 }
 
 bool
@@ -1931,15 +2121,35 @@ RoutingProtocol::CalcDontForward (const Ipv4Address& ID)
           carinfo.list_of_dont_forward.push_back (*cit);
         }
     }
-  if ((ID != m_forward_chain.front ())&&(ID != m_forward_chain.back ()))
+  if (ID != m_forward_chain.front ())
     {
-      for (std::map<Ipv4Address, std::set<Ipv4Address> >::const_iterator cit = m_lc_headNtail.begin ();
+      for (std::map<Ipv4Address, std::list<Ipv4Address> >::const_iterator cit = m_lc_headNtail.begin ();
            cit != m_lc_headNtail.end (); ++cit)
         {
-          for (std::set<Ipv4Address>::const_iterator cit2 = cit->second.begin ();
+          for (std::list<Ipv4Address>::const_iterator cit2 = cit->second.begin ();
                cit2 != cit->second.end (); ++cit2)
             {
               carinfo.list_of_dont_forward.push_back (*cit2);
+            }
+        }
+    }
+  else
+    {
+      for (std::map<Ipv4Address, std::list<Ipv4Address> >::const_iterator cit = m_lc_headNtail.begin ();
+           cit != m_lc_headNtail.end (); ++cit)
+        {
+          bool flag = false;
+          for (std::list<Ipv4Address>::const_reverse_iterator crit2 = cit->second.rbegin ();
+               crit2 != cit->second.rend (); ++crit2)
+            {
+              if (flag)
+                {
+                  carinfo.list_of_dont_forward.push_back (*crit2);
+                }
+              else
+                {
+                  flag = true;//Skip the r-first (last) one.
+                }
             }
         }
     }

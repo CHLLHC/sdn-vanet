@@ -26,18 +26,15 @@
 namespace ns3 {
 
 SdnHelper::SdnHelper ()
-  : m_rl (814),
-    m_sr (419)
+  : m_sr (814)
 {
   m_agentFactory.SetTypeId ("ns3::sdn::RoutingProtocol");
 }
 
 SdnHelper::SdnHelper (const SdnHelper &o)
   : m_agentFactory (o.m_agentFactory),
-    m_rl (o.m_rl),
     m_sr (o.m_sr)
 {
-  m_interfaceExclusions = o.m_interfaceExclusions;
   m_ntmap = o.m_ntmap;
 }
 
@@ -47,35 +44,10 @@ SdnHelper::Copy () const
   return new SdnHelper (*this);
 }
 
-void
-SdnHelper::ExcludeInterface (Ptr<Node> node, uint32_t interface)
-{
-  std::map< Ptr<Node>, std::set<uint32_t> >::iterator it = m_interfaceExclusions.find (node);
-
-  if(it == m_interfaceExclusions.end ())
-    {
-      std::set<uint32_t> interfaces;
-      interfaces.insert (interface);
-
-      m_interfaceExclusions.insert (std::make_pair (node, std::set<uint32_t> (interfaces) ));
-    }
-  else
-    {
-      it->second.insert (interface);
-    }
-}
-
 Ptr<Ipv4RoutingProtocol>
 SdnHelper::Create (Ptr<Node> node) const
 {
   Ptr<sdn::RoutingProtocol> agent = m_agentFactory.Create<sdn::RoutingProtocol> ();
-
-  std::map<Ptr<Node>, std::set<uint32_t> >::const_iterator it = m_interfaceExclusions.find (node);
-
-  if(it != m_interfaceExclusions.end ())
-    {
-      agent->SetInterfaceExclusions (it->second);
-    }
 
   Ptr<MobilityModel> temp = node -> GetObject<MobilityModel> ();
   agent->SetMobility (temp);

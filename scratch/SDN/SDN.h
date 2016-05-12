@@ -21,6 +21,9 @@
 #include "ns3/wifi-80211p-helper.h"
 #include "ns3/wave-mac-helper.h"
 #include "ns3/olsr-helper.h"
+#include "ns3/aodv-helper.h"
+#include "ns3/dsdv-module.h"
+#include "ns3/dsr-module.h"
 
 //FINALLY!
 #include "ns3/sdn-helper.h"
@@ -62,6 +65,7 @@ private:
 	std::string homepath;
 	std::string folder;
 	std::ofstream os;
+	std::ofstream dos;//For Delay File
 	double freq1;//SCH
 	double freq2;//CCH
 	double txp1;//SCH
@@ -73,7 +77,6 @@ private:
 	double interval; // seconds
 	bool verbose;
 	int mod;//1=SDN Other=OLSR
-	int pmod;//0=Range(Default) 1=Other
 	uint32_t nodeNum;
 	double duration;
 	YansWifiPhyHelper m_SCHPhy, m_CCHPhy;
@@ -85,16 +88,38 @@ private:
 	uint32_t RX_Routing_Pkts, TX_Routing_Pkts;
 	uint32_t Rx_Data_Bytes, Tx_Data_Bytes;
 	uint32_t Rx_Data_Pkts, Tx_Data_Pkts;
-	uint32_t Unique_RX_Pkts;
+  uint32_t old_Rx_Data_Pkts, old_Tx_Data_Pkts;
+	uint32_t Unique_RX_Pkts, old_Unique_RX_Pkts;
+
+  uint32_t Rx_Data_Pkts2;
+  uint32_t old_Rx_Data_Pkts2;
+  uint32_t Unique_RX_Pkts2, old_Unique_RX_Pkts2;
+
+  uint32_t Rx_Data_Pkts3;
+  uint32_t old_Rx_Data_Pkts3;
+  uint32_t Unique_RX_Pkts3, old_Unique_RX_Pkts3;
+
 	uint32_t m_port;
 	ApplicationContainer m_source, m_sink, m_cars, m_controller;
 	Ptr<ns3::vanetmobility::VANETmobility> VMo;
 	void ReceiveDataPacket (Ptr<Socket> socket);
+	void ReceiveDataPacket2 (Ptr<Socket> socket);
+	void ReceiveDataPacket3 (Ptr<Socket> socket);
 	void SendDataPacket ();
 	void TXTrace (Ptr<const Packet> newpacket);
 	std::unordered_set<uint64_t> dup_det;
+	std::unordered_set<uint64_t> dup_det2;
+	std::unordered_set<uint64_t> dup_det3;
+
 	std::unordered_map<uint64_t, Time> delay;
 	std::vector<int64_t> delay_vector;
+	std::vector<int64_t> per_sec_delay_vector;
+  std::vector<int64_t> delay_vector2;
+  std::vector<int64_t> per_sec_delay_vector2;
+  std::vector<int64_t> delay_vector3;
+  std::vector<int64_t> per_sec_delay_vector3;
+  std::string m_todo;
+  std::string m_ds;//DataSet
 };
 
 
