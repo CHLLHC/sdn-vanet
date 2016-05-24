@@ -231,11 +231,11 @@ private:
   void SendDontForward (const Ipv4Address& ID);
   void SendLc2Lc ();
 
-  void ProcessLc2Lc (const sdn::MessageHeader &msg, const Ipv4Address& sour);
-  void ProcessDontForward (const sdn::MessageHeader &msg);
-  void ProcessAckHello (const sdn::MessageHeader &msg);
-  void ProcessAppointment (const sdn::MessageHeader &msg);
   void ProcessHM (const sdn::MessageHeader &msg);
+  void ProcessAppointment (const sdn::MessageHeader &msg);
+  void ProcessAckHello (const sdn::MessageHeader &msg);
+  void ProcessDontForward (const sdn::MessageHeader &msg);
+  void ProcessLc2Lc (const sdn::MessageHeader &msg, const Ipv4Address& sour);
 
   void ComputeRoute ();//
 
