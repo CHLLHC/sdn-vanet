@@ -327,8 +327,8 @@ void VanetSim::ConfigApp()
         sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+1), sdn::OTHERS);//Source
         sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+2), sdn::OTHERS);//Sink
 
-        sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+3), sdn::LOCAL_CONTROLLER);//LC2
-        sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+4), sdn::LOCAL_CONTROLLER);//LC3
+        sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+3), sdn::OTHERS);//LC2
+        sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+4), sdn::OTHERS);//LC3
         sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+5), sdn::OTHERS);//Sink2
         sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+6), sdn::OTHERS);//Sink3
         sdn.SetSR (range1);
@@ -590,14 +590,14 @@ void VanetSim::Look_at_clock()
 	std::cout<<"Now:"<<Simulator::Now().GetSeconds();
 	std::cout<<"  Mode: "<<m_todo<<"  ,DataSet: "<<m_ds<<std::endl;
   std::cout<<"Tx_Data_Pkts:   "<<Tx_Data_Pkts<<",   "<<Tx_Data_Pkts - old_Tx_Data_Pkts<<std::endl;
-  //std::cout<<"Rx_Data_Pkts:   "<<Rx_Data_Pkts<<",   "<<Rx_Data_Pkts - old_Rx_Data_Pkts<<std::endl;
-  //std::cout<<"Unique_RX_Pkts: "<<Unique_RX_Pkts<<",   "<<Unique_RX_Pkts - old_Unique_RX_Pkts<<std::endl;
+  std::cout<<"Rx_Data_Pkts:   "<<Rx_Data_Pkts<<",   "<<Rx_Data_Pkts - old_Rx_Data_Pkts<<std::endl;
+  std::cout<<"Unique_RX_Pkts: "<<Unique_RX_Pkts<<",   "<<Unique_RX_Pkts - old_Unique_RX_Pkts<<std::endl;
 
   //std::cout<<"Rx_Data_Pkts2:   "<<Rx_Data_Pkts2<<",   "<<Rx_Data_Pkts2 - old_Rx_Data_Pkts2<<std::endl;
   //std::cout<<"Unique_RX_Pkts2: "<<Unique_RX_Pkts2<<",   "<<Unique_RX_Pkts2 - old_Unique_RX_Pkts2<<std::endl;
 
-  std::cout<<"Rx_Data_Pkts3:   "<<Rx_Data_Pkts3<<",   "<<Rx_Data_Pkts3 - old_Rx_Data_Pkts3<<std::endl;
-  std::cout<<"Unique_RX_Pkts3: "<<Unique_RX_Pkts3<<",   "<<Unique_RX_Pkts3 - old_Unique_RX_Pkts3<<std::endl;
+  //std::cout<<"Rx_Data_Pkts3:   "<<Rx_Data_Pkts3<<",   "<<Rx_Data_Pkts3 - old_Rx_Data_Pkts3<<std::endl;
+  //std::cout<<"Unique_RX_Pkts3: "<<Unique_RX_Pkts3<<",   "<<Unique_RX_Pkts3 - old_Unique_RX_Pkts3<<std::endl;
 
   os<<"Now:  "<<Simulator::Now().GetSeconds()
   <<"Tx_Data_Pkts:   "<<Tx_Data_Pkts
