@@ -22,6 +22,9 @@
 #define SDN_DUPLICATE_DETECTION_H
 #include <list>
 #include <unordered_map>
+#include "ns3/hash.h"
+#include "ns3/packet.h"
+#include "ns3/ptr.h"
 
 namespace ns3{
 namespace sdn{
@@ -29,15 +32,14 @@ namespace sdn{
 class Duplicate_Detection
 {
 public:
-  Duplicate_Detection ();
+  Duplicate_Detection (uint32_t size = 256);
 
-  bool CheckThis (uint16_t messageSequenceNumber);
-  void SetSize (uint32_t size);
+  bool CheckThis (Ptr<const Packet> p);
 
 private:
   uint32_t m_size;
-  std::list<uint16_t> m_container;
-  std::unordered_map<uint16_t, std::list<uint16_t>::iterator > m_containerMap;
+  std::list<uint64_t> m_container;
+  std::unordered_map<uint64_t, std::list<uint64_t>::iterator > m_containerMap;
 };
 
 

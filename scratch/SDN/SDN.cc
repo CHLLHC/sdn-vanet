@@ -327,7 +327,7 @@ void VanetSim::ConfigApp()
         sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+1), sdn::OTHERS);//Source
         sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+2), sdn::OTHERS);//Sink
 
-        sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+3), sdn::LOCAL_CONTROLLER);//LC2
+        sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+3), sdn::OTHERS);//LC2
         sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+4), sdn::OTHERS);//LC3
         sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+5), sdn::OTHERS);//Sink2
         sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+6), sdn::OTHERS);//Sink3
@@ -401,7 +401,8 @@ void VanetSim::ConfigApp()
 
 
 	OnOffHelper Source("ns3::UdpSocketFactory",remote);//SendToSink
-	Source.SetAttribute("OffTime",StringValue ("ns3::ConstantRandomVariable[Constant=0.0]"));
+	Source.SetConstantRate(DataRate("128kbps"));
+	//Source.SetAttribute("OffTime",StringValue ("ns3::ConstantRandomVariable[Constant=0.0]"));
 	//Source.SetAttribute("PacketSize", UintegerValue (packetSize));
 
 	m_source = Source.Install(m_nodes.Get(nodeNum+1));//Insatll on Source
@@ -606,6 +607,10 @@ void VanetSim::Look_at_clock()
 
   old_Unique_RX_Pkts3 = Unique_RX_Pkts3;
   old_Rx_Data_Pkts3 = Rx_Data_Pkts3;
+  old_Unique_RX_Pkts2 = Unique_RX_Pkts2;
+  old_Rx_Data_Pkts2 = Rx_Data_Pkts2;
+  old_Unique_RX_Pkts = Unique_RX_Pkts;
+  old_Rx_Data_Pkts = Rx_Data_Pkts;
   old_Tx_Data_Pkts  = Tx_Data_Pkts;
 
 	/*Ptr<MobilityModel> Temp = m_nodes.Get (nodeNum)->GetObject<MobilityModel>();

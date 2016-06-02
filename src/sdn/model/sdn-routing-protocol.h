@@ -22,6 +22,7 @@
 #define SDN_IMPL_H
 
 #include "sdn-header.h"
+#include "sdn-duplicate-detection.h"
 
 #include "ns3/object.h"
 #include "ns3/packet.h"
@@ -357,6 +358,8 @@ private:
   std::vector<std::pair<Ipv4Address, double> > m_bs_sort;
   double m_lowerbound;
   Algo m_algorithm;
+
+  Duplicate_Detection m_DD;
 };
 
 

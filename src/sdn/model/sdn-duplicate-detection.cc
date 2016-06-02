@@ -23,23 +23,31 @@
 namespace ns3{
 namespace sdn{
 
-Duplicate_Detection::Duplicate_Detection ():
-    m_size (0) {};
+Duplicate_Detection::Duplicate_Detection (uint32_t size):
+    m_size (size) {};
 
 bool
-Duplicate_Detection::CheckThis (uint16_t messageSequenceNumber)
+Duplicate_Detection::CheckThis (Ptr<const Packet> p)
 {
-  if (m_containerMap.find (messageSequenceNumber) != m_containerMap.end ())
+  /*uint32_t sizep = p->GetSize();
+  uint8_t* buffer = new uint8_t[sizep];
+  p->CopyData(buffer, sizep);
+  uint64_t hashV = Hash64 ((char*)(buffer), sizep);
+  delete buffer;
+*/
+  uint64_t hashV = p->GetUid();
+
+  if (m_containerMap.find (hashV) != m_containerMap.end ())
     {
-      m_container.erase (m_containerMap[messageSequenceNumber]);
-      m_container.push_front (messageSequenceNumber);
-      m_containerMap[messageSequenceNumber] = m_container.begin ();
+      m_container.erase (m_containerMap[hashV]);
+      m_container.push_front (hashV);
+      m_containerMap[hashV] = m_container.begin ();
       return true;
     }
   else
     {
-      m_container.push_front (messageSequenceNumber);
-      m_containerMap[messageSequenceNumber] = m_container.begin ();
+      m_container.push_front (hashV);
+      m_containerMap[hashV] = m_container.begin ();
       if (m_container.size () > m_size)
         {
           m_containerMap.erase (*m_container.rbegin());
@@ -47,12 +55,6 @@ Duplicate_Detection::CheckThis (uint16_t messageSequenceNumber)
         }
       return false;
     }
-}
-
-void
-Duplicate_Detection::SetSize (uint32_t size)
-{
-  m_size = size;
 }
 
 }

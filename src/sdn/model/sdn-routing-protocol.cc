@@ -409,13 +409,21 @@ RoutingProtocol::RouteInput(Ptr<const Packet> p,
   // Local delivery
   NS_ASSERT (m_ipv4->GetInterfaceForDevice (idev) >= 0);
   uint32_t iif = m_ipv4->GetInterfaceForDevice (idev);
+  if ((m_appointmentResult == FORWARDER)&&(iif == m_SCHinterface))
+    {
+      std::cout<<Ipv4toString (m_SCHAddress)<<"GetFrom"<<Ipv4toString (sour)<<std::flush;
+    }
+
   if (m_ipv4->IsDestinationAddress (dest, iif))
     {
+      bool DD_result = m_DD.CheckThis (p);
+
       //Local delivery
       if (!lcb.IsNull ())
         {
           NS_LOG_LOGIC ("Broadcast local delivery to " << dest);
-          lcb (p, header, iif);
+          if (!DD_result)
+            lcb (p, header, iif);
         }
       else
         {
@@ -424,18 +432,10 @@ RoutingProtocol::RouteInput(Ptr<const Packet> p,
           return false;
         }
 
-      if ((m_appointmentResult == FORWARDER)&&(!IsInMyArea (m_mobility->GetPosition ()))&&(m_lc_controllArea_vaild))
-        {
-          std::cout<<"!IsInMyArea"<<Ipv4toString (m_CCHAddress)
-                   <<",Pos:"<<m_mobility->GetPosition ().x<<","<<m_mobility->GetPosition ().y
-                   <<","<<m_mobility->GetPosition ().z<<" Start:"<<m_lc_start.x<<","
-                   <<m_lc_start.y<<";End:"<<m_lc_end.x<<","<<m_lc_end.y<<std::endl;
-          m_appointmentResult = NORMAL;
-        }
-
-
       //Broadcast forward
-      if ((iif == m_SCHinterface) && (m_nodetype == CAR) && (m_appointmentResult == FORWARDER) && (!IsInDontForward (sour)))
+      if ((iif == m_SCHinterface) && (m_nodetype == CAR)
+           && (m_appointmentResult == FORWARDER) && (!IsInDontForward (sour))
+           && (!DD_result))
         {
           NS_LOG_LOGIC ("Forward broadcast");
           Ptr<Ipv4Route> broadcastRoute = Create<Ipv4Route> ();
@@ -444,14 +444,40 @@ RoutingProtocol::RouteInput(Ptr<const Packet> p,
           Ipv4Header ipHeader = header;
           ipHeader.SetSource (m_SCHAddress); //To Prevent Brocast Storm, m_CCHAddress is for CCH.
           ipHeader.SetTtl (ipHeader.GetTtl () - 1);
+          std::cout<<"FOR"<<std::flush;
           if (ipHeader.GetTtl ()!=0)
             {
+              std::cout<<"WARD"<<std::flush;
               ucb (broadcastRoute, p, ipHeader);
               //std::cout<<"FORWARD,UCB,TTL:"<<int(ipHeader.GetTtl())<<std::endl;
             }
         }
-      return true;
+      else
+        {
+          if ((m_appointmentResult == FORWARDER)&&(iif == m_SCHinterface))
+            {
+              if (m_nodetype != CAR)
+                std::cout<<"m_nodetype != CAR,"<<std::flush;
+              if (IsInDontForward (sour))
+                std::cout<<"IsInDontForward (sour),"<<std::flush;
+              if (DD_result)
+                std::cout<<"DD_result,"<<std::flush;
+            }
+        }
+      if ((m_appointmentResult == FORWARDER)&&(iif == m_SCHinterface))
+        {
+          std::cout<<std::endl;
+        }
 
+      if ((m_appointmentResult == FORWARDER)&&((!IsInMyArea (m_mobility->GetPosition ()))||(!m_lc_controllArea_vaild)))
+        {
+          std::cout<<"!IsInMyArea"<<Ipv4toString (m_CCHAddress)
+                   <<",Pos:"<<m_mobility->GetPosition ().x<<","<<m_mobility->GetPosition ().y
+                   <<","<<m_mobility->GetPosition ().z<<" Start:"<<m_lc_start.x<<","
+                   <<m_lc_start.y<<";End:"<<m_lc_end.x<<","<<m_lc_end.y<<std::endl;
+          m_appointmentResult = NORMAL;
+        }
+      return true;
     }
   //Drop
   return true;
@@ -868,9 +894,6 @@ RoutingProtocol::SendLc2Lc ()
       lc2lc.list.push_back (*cit);
     }
 
-  //lc2lc.list.push_back (m_forward_chain.front ());
-  //lc2lc.list.push_back (m_forward_chain.back ());
-
   lc2lc.list_size = lc2lc.list.size ();
   QueueMessage (msg, JITTER);
 }
@@ -931,6 +954,7 @@ RoutingProtocol::ProcessAppointment (const sdn::MessageHeader &msg)
         case NORMAL:
           break;
         case FORWARDER:
+          std::cout<<Ipv4toString (m_SCHAddress)<<"GET APPOINTMENT."<<std::endl;
           break;
         default:
           std::cout<<"RoutingProtocol::ProcessAppointment->ERROR TYPE"<<std::endl;
@@ -985,11 +1009,14 @@ RoutingProtocol::ProcessDontForward (const sdn::MessageHeader &msg)
       NS_ASSERT (dontforward.list_size >= 0);
 
       m_dont_forward.clear ();
+      std::cout<<"Car:"<<Ipv4toString (m_SCHAddress)<<":::";
       for (std::vector<Ipv4Address>::const_iterator cit = dontforward.list.begin ();
            cit != dontforward.list.end (); ++cit)
         {
           m_dont_forward.insert (*cit);
+          std::cout<<Ipv4toString (*cit)<<";";
         }
+      std::cout<<std::endl;
     }
 }
 
@@ -1428,7 +1455,7 @@ bool
 RoutingProtocol::TestResult (double result)
 {
   //INIT
-  bool flag = true;
+  bool flag = true;//whether we still processing the last area
   double const LengthOfLastArea = 0.5 * m_signal_range;
   for (std::vector<std::pair<Ipv4Address, double> >::const_iterator cit = m_bs_sort.begin ();
        cit != m_bs_sort.end (); ++cit)
@@ -1474,11 +1501,14 @@ RoutingProtocol::TestResult (double result)
                 }
               double const vi = GetProjection (m_lc_info[m_bs_sort[i].first].Velocity);
               double const vj = GetProjection (m_lc_info[m_bs_sort[j].first].Velocity);
-              double const ppi = (vi * result + m_bs_sort[i].second);
-              bool const b4ileft = ppi < m_road_length;
-              double const ppj = (vj * result + m_bs_sort[j].second);
-              bool const b4jleft = ppj < m_road_length;
-              bool const b4ijlost = dabs (ppi - ppj) < m_signal_range * m_safety_raito;
+              double const hppi = (vi * (2 - m_safety_raito) * result + m_bs_sort[i].second);//High Predict Position of I
+              double const lppi = (vi * m_safety_raito * result + m_bs_sort[i].second);//Low Predict Position of I
+              bool const b4ileft = hppi < m_road_length;
+              double const hppj = (vj * (2 - m_safety_raito) * result + m_bs_sort[j].second);//High Predict Position of J
+              double const lppj = (vj * result + m_bs_sort[j].second);//Low Predict Position of J
+              bool const b4jleft = hppj < m_road_length;
+              bool const b4ijlost = (dabs (hppi - lppj) < m_signal_range)
+                                  &&(dabs (lppi - hppj) < m_signal_range);
               if (b4ileft && b4jleft && b4ijlost)
                 {
                   if (m_lc_info[m_bs_sort[i].first].minhop >  m_lc_info[m_bs_sort[j].first].minhop + 1)
