@@ -112,6 +112,8 @@ void VanetSim::ParseArguments(int argc, char *argv[])
 	// Fix non-unicast data rate to be the same as that of unicast
 	Config::SetDefault ("ns3::WifiRemoteStationManager::NonUnicastMode",
 	                      StringValue (phyMode));
+	UintegerValue ctsThr = 0;
+	Config::SetDefault ("ns3::WifiRemoteStationManager::RtsCtsThreshold", ctsThr);
 
 
 	switch (mod)
@@ -223,10 +225,10 @@ void VanetSim::ConfigChannels()
 
 	SCH80211p.SetRemoteStationManager ("ns3::ConstantRateWifiManager",
 										"DataMode",StringValue (phyMode),
-										"ControlMode",StringValue (phyMode));
+										"ControlMode",StringValue ("OfdmRate3MbpsBW10MHz "));
 	CCH80211p.SetRemoteStationManager ("ns3::ConstantRateWifiManager",
 											"DataMode",StringValue (phyMode),
-											"ControlMode",StringValue (phyMode));
+											"ControlMode",StringValue ("OfdmRate3MbpsBW10MHz"));
 
 	// Set Tx Power For The SCH
 	m_SCHPhy.Set ("TxPowerStart",DoubleValue (txp1));
@@ -327,7 +329,7 @@ void VanetSim::ConfigApp()
         sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+1), sdn::OTHERS);//Source
         sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+2), sdn::OTHERS);//Sink
 
-        sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+3), sdn::OTHERS);//LC2
+        sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+3), sdn::LOCAL_CONTROLLER);//LC2
         sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+4), sdn::OTHERS);//LC3
         sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+5), sdn::OTHERS);//Sink2
         sdn.SetNodeTypeMap (m_nodes.Get (nodeNum+6), sdn::OTHERS);//Sink3
@@ -401,7 +403,8 @@ void VanetSim::ConfigApp()
 
 
 	OnOffHelper Source("ns3::UdpSocketFactory",remote);//SendToSink
-	Source.SetConstantRate(DataRate("128kbps"));
+	//Source.SetConstantRate(DataRate("128kbps"));
+	Source.SetAttribute("OnTime",StringValue ("ns3::ConstantRandomVariable[Constant=0.1]"));
 	//Source.SetAttribute("OffTime",StringValue ("ns3::ConstantRandomVariable[Constant=0.0]"));
 	//Source.SetAttribute("PacketSize", UintegerValue (packetSize));
 
@@ -659,6 +662,7 @@ VanetSim::TXTrace (Ptr<const Packet> newpacket)
 // Example to use ns2 traces file in ns3
 int main (int argc, char *argv[])
 {
+  //LogComponentEnable("MacLow",LOG_LEVEL_ALL);
   VanetSim SDN_test;
   SDN_test.Simulate(argc, argv);
 	return 0;

@@ -411,19 +411,17 @@ RoutingProtocol::RouteInput(Ptr<const Packet> p,
   uint32_t iif = m_ipv4->GetInterfaceForDevice (idev);
   if ((m_appointmentResult == FORWARDER)&&(iif == m_SCHinterface))
     {
-      std::cout<<Ipv4toString (m_SCHAddress)<<"GetFrom"<<Ipv4toString (sour)<<std::flush;
+      std::cout<<Ipv4toString (m_SCHAddress)<<"Get"<<p->GetUid ()<<"From"<<Ipv4toString (sour)<<std::flush;
     }
 
   if (m_ipv4->IsDestinationAddress (dest, iif))
     {
-      bool DD_result = m_DD.CheckThis (p);
 
       //Local delivery
       if (!lcb.IsNull ())
         {
           NS_LOG_LOGIC ("Broadcast local delivery to " << dest);
-          if (!DD_result)
-            lcb (p, header, iif);
+          lcb (p, header, iif);
         }
       else
         {
@@ -434,8 +432,7 @@ RoutingProtocol::RouteInput(Ptr<const Packet> p,
 
       //Broadcast forward
       if ((iif == m_SCHinterface) && (m_nodetype == CAR)
-           && (m_appointmentResult == FORWARDER) && (!IsInDontForward (sour))
-           && (!DD_result))
+           && (m_appointmentResult == FORWARDER) && (!IsInDontForward (sour)))
         {
           NS_LOG_LOGIC ("Forward broadcast");
           Ptr<Ipv4Route> broadcastRoute = Create<Ipv4Route> ();
@@ -448,20 +445,21 @@ RoutingProtocol::RouteInput(Ptr<const Packet> p,
           if (ipHeader.GetTtl ()!=0)
             {
               std::cout<<"WARD"<<std::flush;
-              ucb (broadcastRoute, p, ipHeader);
+              if (!m_DD.CheckThis (p))
+                ucb (broadcastRoute, p, ipHeader);
               //std::cout<<"FORWARD,UCB,TTL:"<<int(ipHeader.GetTtl())<<std::endl;
             }
         }
       else
         {
           if ((m_appointmentResult == FORWARDER)&&(iif == m_SCHinterface))
-            {
+            {/*
               if (m_nodetype != CAR)
                 std::cout<<"m_nodetype != CAR,"<<std::flush;
               if (IsInDontForward (sour))
                 std::cout<<"IsInDontForward (sour),"<<std::flush;
               if (DD_result)
-                std::cout<<"DD_result,"<<std::flush;
+                std::cout<<"DD_result,"<<std::flush;*/
             }
         }
       if ((m_appointmentResult == FORWARDER)&&(iif == m_SCHinterface))
@@ -870,8 +868,10 @@ RoutingProtocol::SendDontForward (const Ipv4Address& ID)
   msg.SetMessageType (sdn::MessageHeader::DONT_FORWARD);
   sdn::MessageHeader::DontForward &dontforward = msg.GetDontForward ();
   dontforward.ID = ID;
+  //dontforward.list.clear ();
   dontforward.list = m_lc_info[ID].list_of_dont_forward;
   dontforward.list_size = dontforward.list.size ();
+  //dontforward.list_size = 0;
   QueueMessage (msg, JITTER);
 }
 
@@ -909,7 +909,10 @@ RoutingProtocol::ProcessHM (const sdn::MessageHeader &msg)
       if (it != m_lc_info.end ())
         {
           it->second.Active = true;
+          Time oldT = it->second.LastActive;
           it->second.LastActive = Simulator::Now ();
+          Vector3D oldP = it->second.Position;
+          Vector3D oldV = it->second.Velocity;
           it->second.Position = msg.GetHello ().GetPosition ();
           it->second.Velocity = msg.GetHello ().GetVelocity ();
           if (it->second.Velocity.x+it->second.Velocity.y+it->second.Velocity.z < 1)//To privent Dead Point
@@ -918,9 +921,19 @@ RoutingProtocol::ProcessHM (const sdn::MessageHeader &msg)
             }
           if (it->second.appointmentResult == FORWARDER)
             {
-              std::cout<<"miscalculation on FORWARDER Car:"<<Ipv4toString (ID)<<std::endl;
-              m_linkEstablished = false;
-              ComputeRoute ();
+              std::cout<<Ipv4toString (ID)<<",("<<it->second.Position.x<<","<<it->second.Position.y<<")"<<std::endl;
+              double delta_t = it->second.LastActive.GetSeconds () - oldT.GetSeconds ();
+              Vector3D pridict_pos = Vector3D(oldP.x + oldV.x * delta_t,
+                                              oldP.y + oldV.y * delta_t,
+                                              oldP.z + oldV.z * delta_t);
+              double distance = CalculateDistance (pridict_pos, it->second.Position );
+
+              if (!CheckLink ())//((distance > ((1-m_safety_raito)/2) * m_signal_range))
+                {
+                  std::cout<<"miscalculation on FORWARDER Car:"<<Ipv4toString (ID)<<std::endl;
+                  m_linkEstablished = false;
+                  ComputeRoute ();
+                }
             }
         }
       else
@@ -938,6 +951,29 @@ RoutingProtocol::ProcessHM (const sdn::MessageHeader &msg)
         }
 
       SendAckHello (ID);
+    }
+  else
+    {
+      Ipv4Address ID = msg.GetHello ().ID;
+      std::map<Ipv4Address, CarInfo>::iterator it = m_lc_info.find (ID);
+      if (it != m_lc_info.end ())
+      {
+        it->second.Active = true;
+        Time oldT = it->second.LastActive;
+        it->second.LastActive = Simulator::Now ();
+        Vector3D oldP = it->second.Position;
+        Vector3D oldV = it->second.Velocity;
+        it->second.Position = msg.GetHello ().GetPosition ();
+        it->second.Velocity = msg.GetHello ().GetVelocity ();
+        if (it->second.Velocity.x+it->second.Velocity.y+it->second.Velocity.z < 1)//To privent Dead Point
+          {
+            it->second.Velocity.z = 10;
+          }
+        if (it->second.appointmentResult == FORWARDER)
+          {
+             ComputeRoute ();
+          }
+      }
     }
   //std::cout<<"V:"<<m_lc_info[ID].Velocity.x<<std::endl;
 }
@@ -1009,7 +1045,8 @@ RoutingProtocol::ProcessDontForward (const sdn::MessageHeader &msg)
       NS_ASSERT (dontforward.list_size >= 0);
 
       m_dont_forward.clear ();
-      std::cout<<"Car:"<<Ipv4toString (m_SCHAddress)<<":::";
+      std::cout<<"Car:"<<Ipv4toString (m_SCHAddress)<<"("<<m_mobility->GetPosition ().x
+          <<","<<m_mobility->GetPosition ().y<<"):::";
       for (std::vector<Ipv4Address>::const_iterator cit = dontforward.list.begin ();
            cit != dontforward.list.end (); ++cit)
         {
@@ -1704,11 +1741,12 @@ RoutingProtocol::CalcDontForward (const Ipv4Address& ID)
   for (std::list<Ipv4Address>::const_iterator cit = m_forward_chain.begin ();
        cit != m_forward_chain.end (); ++cit)
     {
-      if (m_lc_info[*cit].ID_of_minhop != ID)
+      if ((m_lc_info[*cit].ID_of_minhop != ID)&&(*cit != ID))
         {
           carinfo.list_of_dont_forward.push_back (*cit);
         }
     }
+  std::cout<<"ID:"<<Ipv4toString (ID)<<",front:"<<Ipv4toString (m_forward_chain.front())<<std::endl;
   if (ID != m_forward_chain.front ())
     {
       for (std::map<Ipv4Address, std::list<Ipv4Address> >::const_iterator cit = m_lc_headNtail.begin ();
@@ -2079,7 +2117,10 @@ RoutingProtocol::SetControllArea (Vector2D start, Vector2D end)
 bool
 RoutingProtocol::ShouldISendHello ()
 {
-  //return true;
+  if (m_appointmentResult == FORWARDER)
+    {
+      return true;
+    }
 
   if (!m_lc_controllArea_vaild || !m_car_lc_ack_vaild)
     {
@@ -2174,6 +2215,28 @@ RoutingProtocol::GetProjection (const Vector3D &vel) const
          ry = m_lc_end.y - m_lc_start.y;
   return (vx*rx + vy*ry)/(sqrt (pow (rx,2.0) + pow (ry, 2.0)));
 }
+
+bool
+RoutingProtocol::CheckLink ()
+{
+  bool ret = true;
+  std::list<Ipv4Address>::const_iterator fwci = m_forward_chain.begin ();
+  fwci++;
+  while (fwci != m_forward_chain.end ())
+    {
+      Ipv4Address pid = *(fwci--);
+      Ipv4Address tid = *(fwci++);
+      if (CalculateDistance(m_lc_info[pid].Position, m_lc_info[tid].Position) > m_safety_raito * m_signal_range)
+        {
+          std::cout<<"LINK BREAK"<<std::endl;
+          ret = false;
+          break;
+        }
+      fwci++;
+    }
+  return ret;
+}
+
 
 } // namespace sdn
 } // namespace ns3
